@@ -56,8 +56,18 @@
 #pragma mark -
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
-	LOGI(@"%@", NSStringFromSelector(_cmd));
+    LOGI(@"%@", NSStringFromSelector(_cmd));
 	[LinphoneManager.instance enterBackgroundMode];
+    LinphoneCall *call = linphone_core_get_current_call(LC);
+
+    if (!call) {
+        [LinphoneManager.instance stopLinphoneCore];
+    }
+}
+
+- (void)applicationWillEnterForeground:(UIApplication *)application {
+    [LinphoneManager.instance startLinphoneCore];
+    [NSNotificationCenter.defaultCenter postNotificationName:kLinphoneMessageReceived object:nil];
 }
 
 - (void)applicationWillResignActive:(UIApplication *)application {
@@ -157,6 +167,10 @@
 	LOGI(@"[PushKit] Connecting for push notifications");
 	self.voipRegistry.desiredPushTypes = [NSSet setWithObject:PKPushTypeVoIP];
 
+    // Register for remote notifications.
+    LOGI(@"[Paul] register for push notif");
+    [[UIApplication sharedApplication] registerForRemoteNotifications];
+
 	[self configureUINotification];
 }
 
@@ -222,7 +236,7 @@
 								 intentIdentifiers:[[NSMutableArray alloc] init]
 										   options:UNNotificationCategoryOptionCustomDismissAction];
 
-	[UNUserNotificationCenter currentNotificationCenter].delegate = self;
+
 	[[UNUserNotificationCenter currentNotificationCenter] requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
 																		completionHandler:^(BOOL granted, NSError *_Nullable error) {
 																			// Enable or disable features based on authorization.
@@ -232,6 +246,7 @@
     
 	NSSet *categories = [NSSet setWithObjects:cat_call, cat_msg, video_call, cat_zrtp, nil];
 	[[UNUserNotificationCenter currentNotificationCenter] setNotificationCategories:categories];
+    [UNUserNotificationCenter currentNotificationCenter].delegate = self;
 }
 
 #pragma deploymate pop
@@ -281,14 +296,18 @@
 			NSLog(@"Linphone launch doing nothing because start_at_boot or background_mode are not activated.", NULL);
 			return YES;
 		}
+        
+//        [self setAppStateInSharedContainer:false];
 		startedInBackground = true;
-	}
+    } else {
+//        [self setAppStateInSharedContainer:true];
+    }
 	bgStartId = [[UIApplication sharedApplication] beginBackgroundTaskWithExpirationHandler:^{
 	  LOGW(@"Background task for application launching expired.");
 	  [[UIApplication sharedApplication] endBackgroundTask:bgStartId];
 	}];
 
-	[LinphoneManager.instance startLinphoneCore];
+	[LinphoneManager.instance launchLinphoneCore];
 	LinphoneManager.instance.iapManager.notificationCategory = @"expiry_notification";
 	// initialize UI
 	[self.window makeKeyAndVisible];
@@ -514,12 +533,12 @@
 
 - (void)application:(UIApplication *)application
 	didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
-	LOGI(@"%@ : %@", NSStringFromSelector(_cmd), deviceToken);
+	LOGI(@"[Paul] %@ : %@", NSStringFromSelector(_cmd), deviceToken);
 	[LinphoneManager.instance setPushNotificationToken:deviceToken];
 }
 
 - (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
-	LOGI(@"%@ : %@", NSStringFromSelector(_cmd), [error localizedDescription]);
+	LOGI(@"[Paul] %@ : %@", NSStringFromSelector(_cmd), [error localizedDescription]);
 	[LinphoneManager.instance setPushNotificationToken:nil];
 }
 
@@ -539,6 +558,13 @@
 
 - (void)processPush:(NSDictionary *)userInfo {
 	LOGI(@"[PushKit] Notification [%p] received with payload : %@", userInfo, userInfo.description);
+    
+//     prevent app to crash if pushKit received for msg
+    if ([userInfo[@"aps"][@"loc-key"] isEqualToString:@"IM_MSG"]) { // TODO PAUL: a supprimer, fix temporaire: le serveur n'enverra plus de pushkit pr les msg
+        return;
+    }
+    [LinphoneManager.instance startLinphoneCore]; // TODO PAUL : a tester
+    
 	[self configureUINotification];
 	//to avoid IOS to suspend the app before being able to launch long running task
 	[self processRemoteNotification:userInfo];
@@ -556,6 +582,13 @@
 #pragma mark - UNUserNotifications Framework
 
 - (void) userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler {
+
+    NSString *category = [[[notification request] content] categoryIdentifier];
+    if (category && [category isEqualToString:@"app_active"]) {
+        return;
+    }
+    
+    [self configureUINotification];
 	completionHandler(UNNotificationPresentationOptionAlert | UNNotificationPresentationOptionAlert);
 }
 
@@ -568,6 +601,8 @@
 	NSString *callId = (NSString *)[response.notification.request.content.userInfo objectForKey:@"CallId"];
 	if (!callId)
 		return;
+    
+    [LinphoneManager.instance startLinphoneCore]; // TODO PAUL: par précaution si willenterfg ne passe pas avant
 
 	LinphoneCall *call = [LinphoneManager.instance callByCallId:callId];
 	if (call) {
@@ -881,7 +916,7 @@
 											 object:nil];
 	linphone_core_set_provisioning_uri(LC, [configURL UTF8String]);
 	[LinphoneManager.instance destroyLinphoneCore];
-	[LinphoneManager.instance startLinphoneCore];
+	[LinphoneManager.instance launchLinphoneCore];
         [LinphoneManager.instance.fastAddressBook fetchContactsInBackGroundThread];
 }
 
