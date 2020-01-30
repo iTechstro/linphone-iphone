@@ -1778,8 +1778,8 @@ void popup_link_account_cb(LinphoneAccountCreator *creator, LinphoneAccountCreat
 }
 
 - (void)stopLinphoneCore {
-    linphone_core_stop([LinphoneManager getLc]);
     [mIterateTimer invalidate];
+    linphone_core_stop([LinphoneManager getLc]);
 }
 
 - (void)createLinphoneCore {
