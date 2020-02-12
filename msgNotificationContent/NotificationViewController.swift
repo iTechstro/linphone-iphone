@@ -179,7 +179,7 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
     }
 
     class LinphoneCoreManager: CoreDelegate {
-        unowned let parent: NotificationViewController
+        unowned let parent: NotificationViewController  //TODO PAUL : Needed?
 
         init(_ parent: NotificationViewController) {
             self.parent = parent

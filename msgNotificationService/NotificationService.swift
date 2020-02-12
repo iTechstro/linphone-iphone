@@ -45,12 +45,12 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
         bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
         NSLog("[msgNotificationService] start msgNotificationService extension")
 
-        if let bestAttemptContent = bestAttemptContent {
+		if let bestAttemptContent = bestAttemptContent, let callId = bestAttemptContent.userInfo["call-id"] as? String {
 			let config = Config.newWithFactory(configFilename: FileManager.preferenceFile(file: "linphonerc").path, factoryConfigFilename: "")
 			setCoreLogger(config: config!)
 			lc = try! Factory.Instance.createSharedCoreWithConfig(config: config!, systemContext: nil, appGroup: GROUP_ID, mainCore: false)
 
-			let message = lc!.pushNotificationMessage
+			let message = lc!.getPushNotificationMessage(callId: callId)
 
 			if let message = message, let chatRoom = message.chatRoom {
 				let msgData = parseMessage(room: chatRoom, message: message)
