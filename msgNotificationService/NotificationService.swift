@@ -37,8 +37,8 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
     var bestAttemptContent: UNMutableNotificationContent?
 
     var lc: Core?
-    var logDelegate: LinphoneLoggingServiceManager!
-	var log: LoggingService!
+    static var logDelegate: LinphoneLoggingServiceManager!
+	static var log: LoggingService!
 
     override func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
         self.contentHandler = contentHandler
@@ -59,7 +59,7 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
                     bestAttemptContent.badge = badge
                 }
 
-				lc!.stop()
+				stopCore()
 
                 bestAttemptContent.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "msg.caf"))
                 bestAttemptContent.title = NSLocalizedString("Message received", comment: "") + " [extension]"
@@ -87,7 +87,7 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
     override func serviceExtensionTimeWillExpire() {
         // Called just before the extension will be terminated by the system.
         // Use this as an opportunity to deliver your "best attempt" at modified content, otherwise the original push payload will be used.
-		lc?.stop() // TODO PAUL : may not be needed
+		stopCore()
         if let contentHandler = contentHandler, let bestAttemptContent =  bestAttemptContent {
             NSLog("[msgNotificationService] serviceExtensionTimeWillExpire")
             bestAttemptContent.categoryIdentifier = "app_active"
@@ -98,7 +98,7 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
     }
 
 	func parseMessage(room: ChatRoom, message: ChatMessage) -> MsgData? {
-		log.message(msg: "[msgNotificationService] Core received msg \(message.contentType) \n")
+		NotificationService.log.message(msg: "[msgNotificationService] Core received msg \(message.contentType) \n")
 
 		if (message.contentType != "text/plain" && message.contentType != "image/jpeg") {
 			return nil
@@ -128,29 +128,37 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
 			}
 		}
 
-		log.message(msg: "[msgNotificationService] msg: \(content) \n")
+		NotificationService.log.message(msg: "[msgNotificationService] msg: \(content) \n")
 		return msgData;
 	}
 
-    func setCoreLogger(config: Config) {
-        let debugLevel = config.getInt(section: "app", key: "debugenable_preference", defaultValue: LogLevel.Debug.rawValue)
-        let debugEnabled = (debugLevel >= LogLevel.Debug.rawValue && debugLevel < LogLevel.Error.rawValue)
+	func setCoreLogger(config: Config) {
+		if (NotificationService.log == nil || NotificationService.log.getDelegate() == nil) {
+			let debugLevel = config.getInt(section: "app", key: "debugenable_preference", defaultValue: LogLevel.Debug.rawValue)
+			let debugEnabled = (debugLevel >= LogLevel.Debug.rawValue && debugLevel < LogLevel.Error.rawValue)
 
-        if (debugEnabled) {
-            log = LoggingService.Instance /*enable liblinphone logs.*/
-            logDelegate = LinphoneLoggingServiceManager()
-            log.domain = "msgNotificationService"
-            log.logLevel = LogLevel(rawValue: debugLevel)
-            log.addDelegate(delegate: logDelegate)
-        }
-    }
+			if (debugEnabled) {
+				NotificationService.log = LoggingService.Instance /*enable liblinphone logs.*/
+				NotificationService.logDelegate = LinphoneLoggingServiceManager()
+				NotificationService.log.domain = "msgNotificationService"
+				NotificationService.log.logLevel = LogLevel(rawValue: debugLevel)
+				NotificationService.log.addDelegate(delegate: NotificationService.logDelegate)
+			}
+		}
+	}
+
+	func stopCore() {
+		if let lc = lc {
+			lc.stop()
+		}
+	}
 
     func updateBadge() -> Int {
         var count = 0
         count += lc!.unreadChatMessageCount
         count += lc!.missedCallsCount
         count += lc!.callsNb
-        log.message(msg: "[msgNotificationService] badge: \(count)\n")
+		NotificationService.log.message(msg: "[msgNotificationService] badge: \(count)\n")
 
         return count
     }
