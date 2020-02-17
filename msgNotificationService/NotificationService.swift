@@ -45,42 +45,55 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
         bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
         NSLog("[msgNotificationService] start msgNotificationService extension")
 
-		if let bestAttemptContent = bestAttemptContent, let callId = bestAttemptContent.userInfo["call-id"] as? String {
-			let config = Config.newWithFactory(configFilename: FileManager.preferenceFile(file: "linphonerc").path, factoryConfigFilename: "")
-			setCoreLogger(config: config!)
-			lc = try! Factory.Instance.createSharedCoreWithConfig(config: config!, systemContext: nil, appGroup: GROUP_ID, mainCore: false)
+		if let bestAttemptContent = bestAttemptContent {
+			createCore()
 
-			let message = lc!.getPushNotificationMessage(callId: callId)
-
-			if let message = message, let chatRoom = message.chatRoom {
-				let msgData = parseMessage(room: chatRoom, message: message)
-
-                if let badge = updateBadge() as NSNumber? {
-                    bestAttemptContent.badge = badge
-                }
-
+			if let isChatRoomInvite = bestAttemptContent.userInfo["chat-room-invite"] as? Int, isChatRoomInvite == 1 {
+				NotificationService.log.message(msg: "[msgNotificationService] fetch chat room for invite")
+				let chatRoom = lc!.pushNotificationChatRoomInvite
 				stopCore()
+				if let chatRoom = chatRoom {
+					NotificationService.log.message(msg: "[msgNotificationService] chat room invite received")
+					bestAttemptContent.title = "You have been added to a chat room" // TODO PAUL : differencier single lime cr / group chat ?
+//					bestAttemptContent.body = chatRoom.subject // TODO PAUL : don't display the good one
 
-                bestAttemptContent.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "msg.caf"))
-                bestAttemptContent.title = NSLocalizedString("Message received", comment: "") + " [extension]"
-                if let subtitle = msgData?.subtitle {
-                    bestAttemptContent.subtitle = subtitle
-                }
-                if let body = msgData?.body {
-                    bestAttemptContent.body = body
-                }
+					contentHandler(bestAttemptContent)
+					return
+				}
+			} else if let callId = bestAttemptContent.userInfo["call-id"] as? String {
+				NotificationService.log.message(msg: "[msgNotificationService] fetch msg")
+				let message = lc!.getPushNotificationMessage(callId: callId)
 
-                bestAttemptContent.categoryIdentifier = "msg_cat"
+				if let message = message, let chatRoom = message.chatRoom {
+					let msgData = parseMessage(room: chatRoom, message: message)
 
-                bestAttemptContent.userInfo.updateValue(msgData?.callId as Any, forKey: "CallId")
-                bestAttemptContent.userInfo.updateValue(msgData?.from as Any, forKey: "from")
-                bestAttemptContent.userInfo.updateValue(msgData?.peerAddr as Any, forKey: "peer_addr")
-                bestAttemptContent.userInfo.updateValue(msgData?.localAddr as Any, forKey: "local_addr")
+					if let badge = updateBadge() as NSNumber? {
+						bestAttemptContent.badge = badge
+					}
 
-                contentHandler(bestAttemptContent)
-			} else {
-				serviceExtensionTimeWillExpire()
+					stopCore()
+
+					bestAttemptContent.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "msg.caf"))
+					bestAttemptContent.title = NSLocalizedString("Message received", comment: "") + " [extension]"
+					if let subtitle = msgData?.subtitle {
+						bestAttemptContent.subtitle = subtitle
+					}
+					if let body = msgData?.body {
+						bestAttemptContent.body = body
+					}
+
+					bestAttemptContent.categoryIdentifier = "msg_cat"
+
+					bestAttemptContent.userInfo.updateValue(msgData?.callId as Any, forKey: "CallId")
+					bestAttemptContent.userInfo.updateValue(msgData?.from as Any, forKey: "from")
+					bestAttemptContent.userInfo.updateValue(msgData?.peerAddr as Any, forKey: "peer_addr")
+					bestAttemptContent.userInfo.updateValue(msgData?.localAddr as Any, forKey: "local_addr")
+
+					contentHandler(bestAttemptContent)
+					return
+				}
 			}
+			serviceExtensionTimeWillExpire()
         }
     }
 
@@ -146,8 +159,16 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
 			}
 		}
 	}
+	
+	func createCore() {
+		NSLog("[msgNotificationService] create core")
+		let config = Config.newForSharedCore(groupId: GROUP_ID, configFilename: "linphonerc", factoryPath: "")
+		setCoreLogger(config: config!)
+		lc = try! Factory.Instance.createSharedCoreWithConfig(config: config!, systemContext: nil, appGroup: GROUP_ID, mainCore: false)
+	}
 
 	func stopCore() {
+		NotificationService.log.message(msg: "[msgNotificationService] stop core")
 		if let lc = lc {
 			lc.stop()
 		}
@@ -161,54 +182,5 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
 		NotificationService.log.message(msg: "[msgNotificationService] badge: \(count)\n")
 
         return count
-    }
-
-	class LinphoneLoggingServiceManager: LoggingServiceDelegate {
-		override func onLogMessageWritten(logService: LoggingService, domain: String, lev: LogLevel, message: String) {
-			let level: String
-
-			switch lev {
-			case .Debug:
-				level = "Debug"
-			case .Trace:
-				level = "Trace"
-			case .Message:
-				level = "Message"
-			case .Warning:
-				level = "Warning"
-			case .Error:
-				level = "Error"
-			case .Fatal:
-				level = "Fatal"
-			default:
-				level = "unknown"
-			}
-
-			NSLog("[\(level)] \(message)\n")
-		}
-	}
-}
-
-extension FileManager {
-    static func sharedContainerURL() -> URL {
-        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: GROUP_ID)!
-    }
-
-    static func exploreSharedContainer() {
-        if let content = try? FileManager.default.contentsOfDirectory(atPath: FileManager.sharedContainerURL().path) {
-            content.forEach { file in
-                NSLog(file)
-            }
-        }
-    }
-
-    static func preferenceFile(file: String) -> URL {
-        let fullPath = FileManager.sharedContainerURL().appendingPathComponent("Library/Preferences/linphone/")
-        return fullPath.appendingPathComponent(file)
-    }
-
-    static func dataFile(file: String) -> URL {
-        let fullPath = FileManager.sharedContainerURL().appendingPathComponent("Library/Application Support/linphone/")
-        return fullPath.appendingPathComponent(file)
     }
 }

@@ -136,11 +136,11 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
     }
 
     func startCore() throws {
-        config = Config.newWithFactory(configFilename: FileManager.preferenceFile(file: "linphonerc").path, factoryConfigFilename: "")
+		config = Config.newForSharedCore(groupId: GROUP_ID, configFilename: "linphonerc", factoryPath: "")
         setCoreLogger(config: config)
         lc = try! Factory.Instance.createSharedCoreWithConfig(config: config, systemContext: nil, appGroup: GROUP_ID, mainCore: false)
 
-        coreDelegate = LinphoneCoreManager(self)
+        coreDelegate = LinphoneCoreManager()
         lc!.addDelegate(delegate: coreDelegate)
 
         try lc!.start()
@@ -179,11 +179,11 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
     }
 
     class LinphoneCoreManager: CoreDelegate {
-        unowned let parent: NotificationViewController  //TODO PAUL : Needed?
-
-        init(_ parent: NotificationViewController) {
-            self.parent = parent
-        }
+//        unowned let parent: NotificationViewController  //TODO PAUL : Needed?
+//
+//        init(_ parent: NotificationViewController) {
+//            self.parent = parent
+//        }
 
         override func onGlobalStateChanged(lc: Core, gstate: GlobalState, message: String) {
             log.message(msg: "[msgNotificationContent] global state changed: \(gstate) : \(message) \n")
@@ -206,54 +206,5 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
                 isReplySent = true
             }
         }
-    }
-}
-
-class LinphoneLoggingServiceManager: LoggingServiceDelegate {
-    override func onLogMessageWritten(logService: LoggingService, domain: String, lev: LogLevel, message: String) {
-        let level: String
-
-        switch lev {
-        case .Debug:
-            level = "Debug"
-        case .Trace:
-            level = "Trace"
-        case .Message:
-            level = "Message"
-        case .Warning:
-            level = "Warning"
-        case .Error:
-            level = "Error"
-        case .Fatal:
-            level = "Fatal"
-        default:
-            level = "unknown"
-        }
-
-        NSLog("[\(level)] \(message)\n")
-    }
-}
-
-extension FileManager {
-    static func sharedContainerURL() -> URL {
-        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: GROUP_ID)!
-    }
-
-    static func exploreSharedContainer() {
-        if let content = try? FileManager.default.contentsOfDirectory(atPath: FileManager.sharedContainerURL().path) {
-            content.forEach { file in
-                NSLog(file)
-            }
-        }
-    }
-
-    static func preferenceFile(file: String) -> URL {
-        let fullPath = FileManager.sharedContainerURL().appendingPathComponent("Library/Preferences/linphone/")
-        return fullPath.appendingPathComponent(file)
-    }
-
-    static func dataFile(file: String) -> URL {
-        let fullPath = FileManager.sharedContainerURL().appendingPathComponent("Library/Application Support/linphone/")
-        return fullPath.appendingPathComponent(file)
     }
 }
