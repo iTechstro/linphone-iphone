@@ -156,6 +156,9 @@ typedef struct _LinphoneManagerSounds {
 + (NSString *)documentFile:(NSString *)file;
 + (NSString*)dataFile:(NSString*)file;
 + (NSString*)cacheDirectory;
+// migration
++ (NSString *)oldPreferenceFile:(NSString *)file;
++ (NSString *)oldDataFile:(NSString *)file;
 
 - (void)acceptCall:(LinphoneCall *)call evenWithVideo:(BOOL)video;
 - (void)send:(NSString *)replyText toChatRoom:(LinphoneChatRoom *)room;
