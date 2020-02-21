@@ -31,7 +31,7 @@ struct MsgData: Codable {
     var peerAddr: String?
 }
 
-class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add logs
+class NotificationService: UNNotificationServiceExtension {
 
     var contentHandler: ((UNNotificationContent) -> Void)?
     var bestAttemptContent: UNMutableNotificationContent?
@@ -49,11 +49,11 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
 			createCore()
 
 			if let isChatRoomInvite = bestAttemptContent.userInfo["chat-room-invite"] as? Int, isChatRoomInvite == 1 {
-				NotificationService.log.message(msg: "[msgNotificationService] fetch chat room for invite")
+				NotificationService.log.message(msg: "fetch chat room for invite")
 				let chatRoom = lc!.pushNotificationChatRoomInvite
 				stopCore()
 				if let chatRoom = chatRoom {
-					NotificationService.log.message(msg: "[msgNotificationService] chat room invite received")
+					NotificationService.log.message(msg: "chat room invite received")
 					bestAttemptContent.title = "You have been added to a chat room" // TODO PAUL : differencier single lime cr / group chat ?
 //					bestAttemptContent.body = chatRoom.subject // TODO PAUL : don't display the good one
 
@@ -61,7 +61,7 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
 					return
 				}
 			} else if let callId = bestAttemptContent.userInfo["call-id"] as? String {
-				NotificationService.log.message(msg: "[msgNotificationService] fetch msg")
+				NotificationService.log.message(msg: "fetch msg")
 				let message = lc!.getPushNotificationMessage(callId: callId)
 
 				if let message = message, let chatRoom = message.chatRoom {
@@ -111,7 +111,7 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
     }
 
 	func parseMessage(room: ChatRoom, message: ChatMessage) -> MsgData? {
-		NotificationService.log.message(msg: "[msgNotificationService] Core received msg \(message.contentType) \n")
+		NotificationService.log.message(msg: "Core received msg \(message.contentType) \n")
 
 		if (message.contentType != "text/plain" && message.contentType != "image/jpeg") {
 			return nil
@@ -141,34 +141,23 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
 			}
 		}
 
-		NotificationService.log.message(msg: "[msgNotificationService] msg: \(content) \n")
+		NotificationService.log.message(msg: "msg: \(content) \n")
 		return msgData;
 	}
 
-	func setCoreLogger(config: Config) {
-		if (NotificationService.log == nil || NotificationService.log.getDelegate() == nil) {
-			let debugLevel = config.getInt(section: "app", key: "debugenable_preference", defaultValue: LogLevel.Debug.rawValue)
-			let debugEnabled = (debugLevel >= LogLevel.Debug.rawValue && debugLevel < LogLevel.Error.rawValue)
-
-			if (debugEnabled) {
-				NotificationService.log = LoggingService.Instance /*enable liblinphone logs.*/
-				NotificationService.logDelegate = LinphoneLoggingServiceManager()
-				NotificationService.log.domain = "msgNotificationService"
-				NotificationService.log.logLevel = LogLevel(rawValue: debugLevel)
-				NotificationService.log.addDelegate(delegate: NotificationService.logDelegate)
-			}
-		}
-	}
-	
 	func createCore() {
 		NSLog("[msgNotificationService] create core")
 		let config = Config.newForSharedCore(groupId: GROUP_ID, configFilename: "linphonerc", factoryPath: "")
-		setCoreLogger(config: config!)
+
+		if (NotificationService.log == nil || NotificationService.log.getDelegate() == nil) {
+			NotificationService.log = LoggingService.Instance /*enable liblinphone logs.*/
+			NotificationService.logDelegate = try! LinphoneLoggingServiceManager(config: config!, log: NotificationService.log, domain: "msgNotificationService")
+		}
 		lc = try! Factory.Instance.createSharedCoreWithConfig(config: config!, systemContext: nil, appGroup: GROUP_ID, mainCore: false)
 	}
 
 	func stopCore() {
-		NotificationService.log.message(msg: "[msgNotificationService] stop core")
+		NotificationService.log.message(msg: "stop core")
 		if let lc = lc {
 			lc.stop()
 		}
@@ -179,7 +168,7 @@ class NotificationService: UNNotificationServiceExtension { // TODO PAUL : add l
         count += lc!.unreadChatMessageCount
         count += lc!.missedCallsCount
         count += lc!.callsNb
-		NotificationService.log.message(msg: "[msgNotificationService] badge: \(count)\n")
+		NotificationService.log.message(msg: "badge: \(count)\n")
 
         return count
     }

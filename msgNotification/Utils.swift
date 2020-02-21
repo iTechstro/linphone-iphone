@@ -19,7 +19,30 @@
 
 import linphonesw
 
+enum LinphoneError: Error {
+	case timeout
+	case loggingServiceUninitialized
+}
+
 class LinphoneLoggingServiceManager: LoggingServiceDelegate {
+	init(config: Config, log: LoggingService?, domain: String) throws {
+		if let log = log {
+			super.init()
+			let debugLevel = config.getInt(section: "app", key: "debugenable_preference", defaultValue: LogLevel.Debug.rawValue)
+			let debugEnabled = (debugLevel >= LogLevel.Debug.rawValue && debugLevel < LogLevel.Error.rawValue)
+
+			if (debugEnabled) {
+				Factory.Instance.logCollectionPath = Factory.Instance.getDownloadPath(context: UnsafeMutablePointer<Int8>(mutating: (GROUP_ID as NSString).utf8String))
+				Factory.Instance.enableLogCollection(state: LogCollectionState.Enabled)
+				log.domain = domain
+				log.logLevel = LogLevel(rawValue: debugLevel)
+				log.addDelegate(delegate: self)
+			}
+		} else {
+			throw LinphoneError.loggingServiceUninitialized
+		}
+	}
+
 	override func onLogMessageWritten(logService: LoggingService, domain: String, lev: LogLevel, message: String) {
 		let level: String
 
@@ -40,6 +63,6 @@ class LinphoneLoggingServiceManager: LoggingServiceDelegate {
 			level = "unknown"
 		}
 
-		NSLog("[\(level)] \(message)\n")
+		NSLog("\(level) [\(domain)] \(message)\n")
 	}
 }

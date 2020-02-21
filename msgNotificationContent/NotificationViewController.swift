@@ -31,10 +31,6 @@ var log: LoggingService!
 
 class NotificationViewController: UIViewController, UNNotificationContentExtension {
 
-    enum LinphoneCoreError: Error {
-        case timeout
-    }
-
     var lc: Core?
     var config: Config!
     var logDelegate: LinphoneLoggingServiceManager!
@@ -45,13 +41,13 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
         super.viewDidLoad()
         // Do any required interface initialization here.
         NSLog("[msgNotificationContent] start msgNotificationContent extension")
-        
+
         let replyAction = UNTextInputNotificationAction(identifier: "Reply",
                          title: NSLocalizedString("Reply", comment: ""),
                          options: [],
                          textInputButtonTitle: NSLocalizedString("Send", comment: ""),
                          textInputPlaceholder: "")
-        
+
         let seenAction = UNNotificationAction(identifier: "Seen", title: NSLocalizedString("Mark as seen", comment: ""), options: [])
         let category = UNNotificationCategory(identifier: "msg_cat", actions: [replyAction, seenAction], intentIdentifiers: [], options: [.customDismissAction])
         UNUserNotificationCenter.current().setNotificationCategories([category])
@@ -83,15 +79,15 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
             }
 
             if (needToStop) {
-                log.error(msg: "[msgNotificationContent] core stopped by app")
-                throw LinphoneCoreError.timeout
+                log.error(msg: "core stopped by app")
+                throw LinphoneError.timeout
             } else {
                 completion(.dismiss)
                 stopCore()
             }
 
         } catch {
-            log.error(msg: "[msgNotificationContent] error: \(error)")
+            log.error(msg: "error: \(error)")
             completion(.dismissAndForwardAction)
         }
     }
@@ -129,7 +125,7 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
         }
 
         for i in 0...50 where !isReplySent && !needToStop {
-            log.debug(msg: "[msgNotificationContent] reply \(i)")
+            log.debug(msg: "reply \(i)")
             lc!.iterate()
             usleep(10000)
         }
@@ -137,18 +133,19 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
 
     func startCore() throws {
 		config = Config.newForSharedCore(groupId: GROUP_ID, configFilename: "linphonerc", factoryPath: "")
-        setCoreLogger(config: config)
+		log = LoggingService.Instance /*enable liblinphone logs.*/
+		logDelegate = try! LinphoneLoggingServiceManager(config: config, log: log, domain: "msgNotificationContent")
         lc = try! Factory.Instance.createSharedCoreWithConfig(config: config, systemContext: nil, appGroup: GROUP_ID, mainCore: false)
 
         coreDelegate = LinphoneCoreManager()
         lc!.addDelegate(delegate: coreDelegate)
 
         try lc!.start()
-        log.message(msg: "[msgNotificationContent] core started")
+        log.message(msg: "core started")
 
         if (needToStop) {
-            log.error(msg: "[msgNotificationContent] core stopped by app")
-            throw LinphoneCoreError.timeout
+            log.error(msg: "core stopped by app")
+            throw LinphoneError.timeout
         }
     }
 
@@ -156,37 +153,18 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
         lc!.stopAsync()
         // this iterate is needed: in case of reply there is no async task.
         // One iterate is needed to set the status of the shared core to Off
-        log.debug(msg: "[msgNotificationContent] stop")
+        log.message(msg: "stop core")
         lc!.iterate()
         for i in 0...100 where !coreStopped {
-            log.debug(msg: "[msgNotificationContent] stop \(i)")
+            log.debug(msg: "stop \(i)")
             lc!.iterate()
             usleep(50000)
         }
     }
 
-    func setCoreLogger(config: Config) {
-        let debugLevel = config.getInt(section: "app", key: "debugenable_preference", defaultValue: LogLevel.Debug.rawValue)
-        let debugEnabled = (debugLevel >= LogLevel.Debug.rawValue && debugLevel < LogLevel.Error.rawValue)
-
-        if (debugEnabled) {
-            log = LoggingService.Instance /*enable liblinphone logs.*/
-            logDelegate = LinphoneLoggingServiceManager()
-            log.domain = "msgNotificationContent"
-            log.logLevel = LogLevel(rawValue: debugLevel)
-            log.addDelegate(delegate: logDelegate)
-        }
-    }
-
     class LinphoneCoreManager: CoreDelegate {
-//        unowned let parent: NotificationViewController  //TODO PAUL : Needed?
-//
-//        init(_ parent: NotificationViewController) {
-//            self.parent = parent
-//        }
-
         override func onGlobalStateChanged(lc: Core, gstate: GlobalState, message: String) {
-            log.message(msg: "[msgNotificationContent] global state changed: \(gstate) : \(message) \n")
+            log.message(msg: "global state changed: \(gstate) : \(message) \n")
             if (gstate == .Shutdown) {
                 needToStop = true
             } else if (gstate == .Off) {
@@ -194,14 +172,14 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
             }
         }
 
-        override func onRegistrationStateChanged(lc: Core, cfg: ProxyConfig, cstate: RegistrationState, message: String?) {
-            log.message(msg: "[msgNotificationContent] registration state changed: \(cstate) for user id: \( String(describing: cfg.identityAddress?.asString()))\n")
+        override func onRegistrationStateChanged(lc: Core, cfg: ProxyConfig, cstate: RegistrationState, message: String?) { // TODO PAUL : debug, keep it?
+            log.message(msg: "registration state changed: \(cstate) for user id: \( String(describing: cfg.identityAddress?.asString()))\n")
         }
     }
 
     class LinphoneChatMessageManager: ChatMessageDelegate {
         override func onMsgStateChanged(msg: ChatMessage, state: ChatMessage.State) {
-            log.message(msg: "[msgNotificationContent] msg state changed: \(state)\n")
+            log.message(msg: "msg state changed: \(state)\n")
             if (state == .Delivered) {
                 isReplySent = true
             }
