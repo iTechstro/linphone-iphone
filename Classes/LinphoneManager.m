@@ -2249,36 +2249,6 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 		error:nil];
 	}
 
-	if ([LinphoneManager copyFile:[LinphoneManager oldDataFile:@"linphone_chats.db"] destination:[LinphoneManager dataFile:@"linphone_chats.db"] override:TRUE ignore:TRUE]) {
-		[NSFileManager.defaultManager
-		removeItemAtPath:[LinphoneManager oldDataFile:@"linphone_chats.db"]
-		error:nil];
-	} else if ([LinphoneManager copyFile:[LinphoneManager documentFile:@"linphone_chats.db"] destination:[LinphoneManager dataFile:@"linphone_chats.db"] override:TRUE ignore:TRUE]) {
-		[NSFileManager.defaultManager
-		removeItemAtPath:[LinphoneManager documentFile:@"linphone_chats.db"]
-		error:nil];
-	}
-
-	if ([LinphoneManager copyFile:[LinphoneManager oldDataFile:@"zrtp_secrets"] destination:[LinphoneManager dataFile:@"zrtp_secrets"] override:TRUE ignore:TRUE]) {
-		[NSFileManager.defaultManager
-		removeItemAtPath:[LinphoneManager oldDataFile:@"zrtp_secrets"]
-		error:nil];
-	} else if ([LinphoneManager copyFile:[LinphoneManager documentFile:@"zrtp_secrets"] destination:[LinphoneManager dataFile:@"zrtp_secrets"] override:TRUE ignore:TRUE]) {
-		[NSFileManager.defaultManager
-		removeItemAtPath:[LinphoneManager documentFile:@"zrtp_secrets"]
-		error:nil];
-	}
-
-	if ([LinphoneManager copyFile:[LinphoneManager oldDataFile:@"zrtp_secrets.bkp"] destination:[LinphoneManager dataFile:@"zrtp_secrets.bkp"] override:TRUE ignore:TRUE]) {
-		[NSFileManager.defaultManager
-		removeItemAtPath:[LinphoneManager oldDataFile:@"zrtp_secrets.bkp"]
-		error:nil];
-	} else if ([LinphoneManager copyFile:[LinphoneManager documentFile:@"zrtp_secrets.bkp"] destination:[LinphoneManager dataFile:@"zrtp_secrets.bkp"] override:TRUE ignore:TRUE]) {
-		[NSFileManager.defaultManager
-		removeItemAtPath:[LinphoneManager documentFile:@"zrtp_secrets.bkp"]
-		error:nil];
-	}
-
 	if ([LinphoneManager copyFile:[LinphoneManager oldDataFile:@"linphone.db"] destination:[LinphoneManager dataFile:@"linphone.db"] override:TRUE ignore:TRUE]) {
 		[NSFileManager.defaultManager
 		removeItemAtPath:[LinphoneManager oldDataFile:@"linphone.db"]
@@ -2726,6 +2696,21 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 	return [fullPath stringByAppendingPathComponent:file];
 }
 
++ (NSString *)cacheDirectory {
+	LinphoneFactory *factory = linphone_factory_get();
+	NSString *cachePath = [NSString stringWithUTF8String:linphone_factory_get_download_path(factory, kLinphoneMsgNotificationGroupId.UTF8String)];
+	BOOL isDir = NO;
+	NSError *error;
+	// cache directory must be created if not existing
+	if (![[NSFileManager defaultManager] fileExistsAtPath:cachePath isDirectory:&isDir] && isDir == NO) {
+		[[NSFileManager defaultManager] createDirectoryAtPath:cachePath
+		 withIntermediateDirectories:NO
+		 attributes:nil
+		 error:&error];
+	}
+	return cachePath;
+}
+
 + (NSString *)oldPreferenceFile:(NSString *)file {
 	// migration
 	LinphoneFactory *factory = linphone_factory_get();
@@ -2738,21 +2723,6 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 	LinphoneFactory *factory = linphone_factory_get();
 	NSString *fullPath = [NSString stringWithUTF8String:linphone_factory_get_data_path(factory, nil)];
 	return [fullPath stringByAppendingPathComponent:file];
-}
-
-+ (NSString *)cacheDirectory {
-	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
-	NSString *cachePath = [paths objectAtIndex:0];
-	BOOL isDir = NO;
-	NSError *error;
-	// cache directory must be created if not existing
-	if (![[NSFileManager defaultManager] fileExistsAtPath:cachePath isDirectory:&isDir] && isDir == NO) {
-		[[NSFileManager defaultManager] createDirectoryAtPath:cachePath
-		 withIntermediateDirectories:NO
-		 attributes:nil
-		 error:&error];
-	}
-	return cachePath;
 }
 
 + (int)unreadMessageCount {
