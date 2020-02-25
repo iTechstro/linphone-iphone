@@ -21,6 +21,7 @@ import UserNotifications
 import linphonesw
 
 var GROUP_ID = "group.org.linphone.phone.msgNotification"
+var LINPHONE_DUMMY_SUBJECT = "dummy subject"
 
 struct MsgData: Codable {
     var from: String?
@@ -48,14 +49,18 @@ class NotificationService: UNNotificationServiceExtension {
 		if let bestAttemptContent = bestAttemptContent {
 			createCore()
 
-			if let isChatRoomInvite = bestAttemptContent.userInfo["chat-room-invite"] as? Int, isChatRoomInvite == 1 {
-				NotificationService.log.message(msg: "fetch chat room for invite")
-				let chatRoom = lc!.pushNotificationChatRoomInvite
+			if let chatRoomInviteAddr = bestAttemptContent.userInfo["chat-room-invite"] as? String, !chatRoomInviteAddr.isEmpty {
+				NotificationService.log.message(msg: "fetch chat room for invite, addr: \(chatRoomInviteAddr)")
+				let chatRoom = lc!.getPushNotificationChatRoomInvite(chatRoomAddr: chatRoomInviteAddr)
 				stopCore()
 				if let chatRoom = chatRoom {
 					NotificationService.log.message(msg: "chat room invite received")
-					bestAttemptContent.title = "You have been added to a chat room" // TODO PAUL : differencier single lime cr / group chat ?
-//					bestAttemptContent.body = chatRoom.subject // TODO PAUL : don't display the good one
+					bestAttemptContent.title = "You have been added to a chat room"
+					if (chatRoom.subject == LINPHONE_DUMMY_SUBJECT) {
+						bestAttemptContent.body = chatRoom.participants[0].address?.username as! String
+					} else {
+						bestAttemptContent.body = chatRoom.subject
+					}
 
 					contentHandler(bestAttemptContent)
 					return

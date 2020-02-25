@@ -151,10 +151,7 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
 
     func stopCore() {
         lc!.stopAsync()
-        // this iterate is needed: in case of reply there is no async task.
-        // One iterate is needed to set the status of the shared core to Off
         log.message(msg: "stop core")
-        lc!.iterate()
         for i in 0...100 where !coreStopped {
             log.debug(msg: "stop \(i)")
             lc!.iterate()
@@ -170,10 +167,6 @@ class NotificationViewController: UIViewController, UNNotificationContentExtensi
             } else if (gstate == .Off) {
                 coreStopped = true
             }
-        }
-
-        override func onRegistrationStateChanged(lc: Core, cfg: ProxyConfig, cstate: RegistrationState, message: String?) { // TODO PAUL : debug, keep it?
-            log.message(msg: "registration state changed: \(cstate) for user id: \( String(describing: cfg.identityAddress?.asString()))\n")
         }
     }
 
