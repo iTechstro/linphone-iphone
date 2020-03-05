@@ -49,11 +49,12 @@ class NotificationService: UNNotificationServiceExtension {
 		if let bestAttemptContent = bestAttemptContent {
 			createCore()
 
-			if let chatRoomInviteAddr = bestAttemptContent.userInfo["chat-room-invite"] as? String, !chatRoomInviteAddr.isEmpty {
+			if let chatRoomInviteAddr = bestAttemptContent.userInfo["chat-room-addr"] as? String, !chatRoomInviteAddr.isEmpty {
 				NotificationService.log.message(msg: "fetch chat room for invite, addr: \(chatRoomInviteAddr)")
 				let chatRoom = lc!.getPushNotificationChatRoomInvite(chatRoomAddr: chatRoomInviteAddr)
-				stopCore()
+
 				if let chatRoom = chatRoom {
+					stopCore()
 					NotificationService.log.message(msg: "chat room invite received")
 					bestAttemptContent.title = "You have been added to a chat room"
 					if (chatRoom.subject == LINPHONE_DUMMY_SUBJECT) {
@@ -105,7 +106,8 @@ class NotificationService: UNNotificationServiceExtension {
     override func serviceExtensionTimeWillExpire() {
         // Called just before the extension will be terminated by the system.
         // Use this as an opportunity to deliver your "best attempt" at modified content, otherwise the original push payload will be used.
-		stopCore()
+//		stopCore() // TODO PAUL : core can be stopped only when we are sure it started. For now there is no state test in linphone_core_stop to prevent any unwanted stop
+		// this can cause pb, in case getPushNotificationMessage starts core bug return null. core isn't stopped
         if let contentHandler = contentHandler, let bestAttemptContent =  bestAttemptContent {
             NSLog("[msgNotificationService] serviceExtensionTimeWillExpire")
             bestAttemptContent.categoryIdentifier = "app_active"
