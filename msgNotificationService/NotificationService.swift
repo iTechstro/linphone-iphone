@@ -106,8 +106,7 @@ class NotificationService: UNNotificationServiceExtension {
     override func serviceExtensionTimeWillExpire() {
         // Called just before the extension will be terminated by the system.
         // Use this as an opportunity to deliver your "best attempt" at modified content, otherwise the original push payload will be used.
-//		stopCore() // TODO PAUL : core can be stopped only when we are sure it started. For now there is no state test in linphone_core_stop to prevent any unwanted stop
-		// this can cause pb, in case getPushNotificationMessage starts core bug return null. core isn't stopped
+		stopCore()
         if let contentHandler = contentHandler, let bestAttemptContent =  bestAttemptContent {
             NSLog("[msgNotificationService] serviceExtensionTimeWillExpire")
             bestAttemptContent.categoryIdentifier = "app_active"

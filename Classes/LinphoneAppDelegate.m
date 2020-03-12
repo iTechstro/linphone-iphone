@@ -601,9 +601,6 @@
 	NSString *callId = (NSString *)[response.notification.request.content.userInfo objectForKey:@"CallId"];
 	if (!callId)
 		return;
-    
-//    [LinphoneManager.instance startLinphoneCore]; // TODO PAUL: par précaution si willenterfg ne passe pas avant
-    // removed it because it causes the core to start when deleting the notif.
 
 	LinphoneCall *call = [LinphoneManager.instance callByCallId:callId];
 	if (call) {
