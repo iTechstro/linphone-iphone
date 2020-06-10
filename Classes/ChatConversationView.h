@@ -54,11 +54,13 @@
 	BOOL composingVisible;
     UIConfirmationDialog *securityDialog;
     UIRefreshControl *refreshControl;
+	BOOL isOneToOne;
 }
 
 @property(nonatomic) LinphoneChatRoom *chatRoom;
 @property(nonatomic) LinphoneChatRoomCbs *chatRoomCbs;
 @property(nonatomic) Boolean markAsRead;
+@property(nonatomic) const char *peerAddress;
 
 @property (strong, nonatomic) FileDataSource *FileDataSource;
 

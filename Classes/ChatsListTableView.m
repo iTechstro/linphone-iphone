@@ -19,7 +19,6 @@
 
 #import "ChatsListTableView.h"
 #import "UIChatCell.h"
-
 #import "FileTransferDelegate.h"
 
 #import "linphone/linphonecore.h"
@@ -98,12 +97,7 @@ static int sorted_history_comparison(LinphoneChatRoom *to_insert, LinphoneChatRo
 	while (iter) {
 		// store last message in user data
 		LinphoneChatRoom *chat_room = iter->data;
-		// hide empty one-to-one chat room
-		LinphoneChatRoomCapabilitiesMask capabilities = linphone_chat_room_get_capabilities(chat_room);
-		ChatConversationView *view = VIEW(ChatConversationView);
-		if (linphone_chat_room_get_history_size(chat_room) > 0 || !(capabilities & LinphoneChatRoomCapabilitiesOneToOne) || (IPAD && view.chatRoom == chat_room)) {
-			sorted = bctbx_list_insert_sorted(sorted, chat_room, (bctbx_compare_func)sorted_history_comparison);
-		}
+		sorted = bctbx_list_insert_sorted(sorted, chat_room, (bctbx_compare_func)sorted_history_comparison);
 		iter = iter->next;
 	}
 	return sorted;
@@ -120,81 +114,15 @@ static int sorted_history_comparison(LinphoneChatRoom *to_insert, LinphoneChatRo
 		if (idx != -1) {
 			NSIndexPath *indexPath = [NSIndexPath indexPathForRow:idx inSection:0];
 			[self.tableView selectRowAtIndexPath:indexPath animated:NO scrollPosition:UITableViewScrollPositionNone];
+		} else if ([LinphoneManager.instance lpConfigBoolForKey:@"create_chat" withDefault:FALSE]) {
+		// if create chat, show the empty chat
+			[LinphoneManager.instance lpConfigSetBool:FALSE forKey:@"create_chat"];
 		} else if (![self selectFirstRow]) {
 			ChatConversationCreateView *view = VIEW(ChatConversationCreateView);
 			view.tableController.notFirstTime = FALSE;
 			[PhoneMainView.instance changeCurrentView:view.compositeViewDescription];
 		}
 	}
-}
-
-+ (void) saveDataToUserDefaults {
-	// As extensions is disabled by default, this function takes too much CPU.
-#if 0
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"group.belledonne-communications.linphone.widget"];
-    MSList *sorted = nil;
-    const MSList *unsorted = linphone_core_get_chat_rooms(LC);
-    const MSList *iter = unsorted;
-    
-    while (iter) {
-        // store last message in user data
-        LinphoneChatRoom *chat_room = iter->data;
-        sorted = bctbx_list_insert_sorted(sorted, chat_room, (bctbx_compare_func)sorted_history_comparison);
-        iter = iter->next;
-    }
-    
-    NSMutableArray *addresses = [NSMutableArray array];
-    
-    while (sorted) {
-        NSMutableDictionary *dict = [NSMutableDictionary dictionary];
-        LinphoneChatRoom *cr = sorted->data;
-        if (!cr) {
-            sorted = sorted->next;
-            continue;
-        }
-        const LinphoneAddress *peer_address = linphone_chat_room_get_peer_address(cr);
-        const LinphoneAddress *local_address = linphone_chat_room_get_local_address(cr);
-        NSString *display;
-        [dict setObject:[NSString stringWithUTF8String:linphone_address_as_string_uri_only(peer_address)]
-                 forKey:@"peer"];
-        [dict setObject:local_address?[NSString stringWithUTF8String:linphone_address_as_string_uri_only(local_address)]:@""
-                 forKey:@"local"];
-        LinphoneChatRoomCapabilitiesMask capabilities = linphone_chat_room_get_capabilities(cr);
-        if (!(capabilities & LinphoneChatRoomCapabilitiesOneToOne)) {
-            if (!linphone_chat_room_get_subject(cr)) {
-                sorted = sorted->next;
-                continue;
-            }
-            display = [NSString stringWithUTF8String:linphone_chat_room_get_subject(cr)];
-        } else {
-            bctbx_list_t *participants = linphone_chat_room_get_participants(cr);
-            LinphoneParticipant *firstParticipant = participants ? (LinphoneParticipant *)participants->data : NULL;
-            const LinphoneAddress *addr = firstParticipant ? linphone_participant_get_address(firstParticipant) : peer_address;
-            if (!linphone_address_get_username(addr)) {
-                sorted = sorted->next;
-                continue;
-            }
-            display = [NSString stringWithUTF8String:linphone_address_get_display_name(addr)?:linphone_address_get_username(addr)];
-            if ([FastAddressBook imageForAddress:addr])
-                [dict setObject:UIImageJPEGRepresentation([UIImage resizeImage:[FastAddressBook imageForAddress:peer_address]
-                                                                  withMaxWidth:200
-                                                                  andMaxHeight:200],
-                                                          1)
-                         forKey:@"img"];
-        }
-        [dict setObject:display
-                 forKey:@"display"];
-        BOOL isGroupChat = linphone_chat_room_get_capabilities(cr) & LinphoneChatRoomCapabilitiesConference;
-        [dict setObject:[NSNumber numberWithBool:isGroupChat]
-                 forKey:@"nbParticipants"];
-        [addresses addObject:dict];
-        if (addresses.count >= 4) //send no more data than needed
-            break;
-        sorted = sorted->next;
-	}
-	
-    [defaults setObject:addresses forKey:@"chatrooms"];
-#endif
 }
 
 - (void)markCellAsRead:(LinphoneChatRoom *)chatRoom {

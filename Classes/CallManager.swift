@@ -37,19 +37,19 @@ import AVFoundation
 	static var theCallManager: CallManager?
 	let providerDelegate: ProviderDelegate! // to support callkit
 	let callController: CXCallController! // to support callkit
-	let manager: CoreManager! // callbacks of the linphonecore
+	let manager: CoreManagerDelegate! // callbacks of the linphonecore
 	var lc: Core?
 	@objc var speakerBeforePause : Bool = false
 	@objc var speakerEnabled : Bool = false
 	@objc var bluetoothEnabled : Bool = false
 	@objc var nextCallIsTransfer: Bool = false
-	@objc var callHandled: String = ""
+	@objc var alreadyRegisteredForNotification: Bool = false
 
 
 	fileprivate override init() {
 		providerDelegate = ProviderDelegate()
 		callController = CXCallController()
-		manager = CoreManager()
+		manager = CoreManagerDelegate()
 	}
 
 	@objc static func instance() -> CallManager {
@@ -117,15 +117,6 @@ import AVFoundation
 		return false
 	}
 
-	@objc static func incomingCallMustBeDisplayed() -> Bool {
-		if #available(iOS 13.0, *) {
-			if UIApplication.shared.applicationState == .background && CallManager.callKitEnabled() && CallManager.instance().lc?.callsNb ?? 0 < 2 {
-				return true
-			}
-		}
-		return false
-	}
-
 	@objc func allowSpeaker() -> Bool {
 		if (UIDevice.current.userInterfaceIdiom == .pad) {
 			// For now, ipad support only speaker.
@@ -142,7 +133,7 @@ import AVFoundation
 		return allow
 	}
 
-	@objc func setSpeakerEnabled(enable: Bool) {
+	@objc func enableSpeaker(enable: Bool) {
 		speakerEnabled = enable
 		do {
 			if (enable && allowSpeaker()) {
@@ -150,6 +141,7 @@ import AVFoundation
 				UIDevice.current.isProximityMonitoringEnabled = false
 				bluetoothEnabled = false
 			} else {
+				try AVAudioSession.sharedInstance().overrideOutputAudioPort(.none)
 				let buildinPort = AudioHelper.bluetoothAudioDevice()
 				try AVAudioSession.sharedInstance().setPreferredInput(buildinPort)
 				UIDevice.current.isProximityMonitoringEnabled = (lc!.callsNb > 0)
@@ -171,22 +163,21 @@ import AVFoundation
 
 	// From ios13, display the callkit view when the notification is received.
 	@objc func displayIncomingCall(callId: String) {
-		let call = CallManager.instance().lc?.currentCall
+		let uuid = CallManager.instance().providerDelegate.uuids["\(callId)"]
+		if (uuid != nil) {
+			// This call was declined.
+			providerDelegate.reportIncomingCall(call:nil, uuid: uuid!, handle: "Calling", hasVideo: false)
+			providerDelegate.endCall(uuid: uuid!)
+			return
+		}
+
+		let call = CallManager.instance().callByCallId(callId: callId)
 		if (call != nil) {
 			let addr = FastAddressBook.displayName(for: call?.remoteAddress?.getCobject) ?? "Unknow"
 			let video = call?.params?.videoEnabled ?? false
 			displayIncomingCall(call: call, handle: addr, hasVideo: video, callId: callId)
 		} else {
 			displayIncomingCall(call: nil, handle: "Calling", hasVideo: false, callId: callId)
-		}
-	}
-
-	// There is an error before display an incoming call. Attention, it's unnormal in this case!
-	@objc func displayForkIncomingCall() {
-		if CallManager.incomingCallMustBeDisplayed() {
-			// Display the call in any way, otherwise it will cause a crash.
-			Log.directLog(BCTBX_LOG_ERROR, text: "CallKit: please check the pushkit notification, there must be something wrong!")
-			providerDelegate.reportForkIncomingCall();
 		}
 	}
 
@@ -348,9 +339,42 @@ import AVFoundation
 			Log.directLog(BCTBX_LOG_WARNING, text: "CallKit: Unable to config audio session because : \(error)")
 		}
 	}
+
+	@objc func terminateCall(call: OpaquePointer?) {
+		if (call == nil) {
+			Log.directLog(BCTBX_LOG_ERROR, text: "Can not terminate null call!")
+			return
+		}
+		let call = Call.getSwiftObject(cObject: call!)
+		do {
+			try call.terminate()
+			Log.directLog(BCTBX_LOG_DEBUG, text: "Call terminated")
+		} catch {
+			Log.directLog(BCTBX_LOG_ERROR, text: "Failed to terminate call failed because \(error)")
+		}
+		if (UIApplication.shared.applicationState == .background) {
+			CoreManager.instance().stopLinphoneCore()
+		}
+	}
+
+	@objc func markCallAsDeclined(callId: String) {
+		if !CallManager.callKitEnabled() {
+			return
+		}
+
+		let uuid = providerDelegate.uuids["\(callId)"]
+		if (uuid == nil) {
+			Log.directLog(BCTBX_LOG_MESSAGE, text: "Mark call \(callId) as declined.")
+			let uuid = UUID()
+			providerDelegate.uuids.updateValue(uuid, forKey: callId)
+		} else {
+			// end call
+			providerDelegate.endCall(uuid: uuid!)
+		}
+	}
 }
 
-class CoreManager: CoreDelegate {
+class CoreManagerDelegate: CoreDelegate {
 	static var speaker_already_enabled : Bool = false
 
 	override func onCallStateChanged(lc: Core, call: Call, cstate: Call.State, message: String) {
@@ -361,7 +385,7 @@ class CoreManager: CoreDelegate {
 		let video = call.params?.videoEnabled ?? false
 		// we keep the speaker auto-enabled state in this static so that we don't
 		// force-enable it on ICE re-invite if the user disabled it.
-		CoreManager.speaker_already_enabled = false
+		CoreManagerDelegate.speaker_already_enabled = false
 
 		if (call.userData == nil) {
 			let appData = CallAppData()
@@ -384,12 +408,7 @@ class CoreManager: CoreDelegate {
 							// The call is already answered.
 							CallManager.instance().acceptCall(call: call, hasVideo: video)
 						}
-					} else {
-						if (CallManager.incomingCallMustBeDisplayed()) {
-							// it must post an incoming call to the system after receiving a PushKit VoIP push callback.
-							break;
-						}
-						// Nothing happped before, display a new Incoming call.
+					} else if (!(CallManager.instance().alreadyRegisteredForNotification && UIApplication.shared.isRegisteredForRemoteNotifications)) {
 						CallManager.instance().displayIncomingCall(call: call, handle: address, hasVideo: video, callId: callId!)
 					}
 				} else if (UIApplication.shared.applicationState != .active) {
@@ -409,17 +428,19 @@ class CoreManager: CoreDelegate {
 					let uuid = CallManager.instance().providerDelegate.uuids["\(callId!)"]
 					if (uuid != nil) {
 						let callInfo = CallManager.instance().providerDelegate.callInfos[uuid!]
-						if (callInfo?.isOutgoing ?? false) {
+						if (callInfo != nil && callInfo!.isOutgoing && !callInfo!.connected) {
 							Log.directLog(BCTBX_LOG_MESSAGE, text: "CallKit: outgoing call connected with uuid \(uuid!) and callId \(callId!)")
 							CallManager.instance().providerDelegate.reportOutgoingCallConnected(uuid: uuid!)
+							callInfo!.connected = true
+							CallManager.instance().providerDelegate.callInfos.updateValue(callInfo!, forKey: uuid!)
 						}
 					}
 				}
 
 				if (CallManager.instance().speakerBeforePause) {
 					CallManager.instance().speakerBeforePause = false
-					CallManager.instance().setSpeakerEnabled(enable: true)
-					CoreManager.speaker_already_enabled = true
+					CallManager.instance().enableSpeaker(enable: true)
+					CoreManagerDelegate.speaker_already_enabled = true
 				}
 				break
 			case .OutgoingRinging:
@@ -440,9 +461,9 @@ class CoreManager: CoreDelegate {
 			case .End,
 				 .Error:
 				UIDevice.current.isProximityMonitoringEnabled = false
-				CoreManager.speaker_already_enabled = false
+				CoreManagerDelegate.speaker_already_enabled = false
 				if (CallManager.instance().lc!.callsNb == 0) {
-					CallManager.instance().setSpeakerEnabled(enable: false)
+					CallManager.instance().enableSpeaker(enable: false)
 					// disable this because I don't find anygood reason for it: _bluetoothAvailable = FALSE;
 					// furthermore it introduces a bug when calling multiple times since route may not be
 					// reconfigured between cause leading to bluetooth being disabled while it should not
@@ -487,9 +508,9 @@ class CoreManager: CoreDelegate {
 		}
 
 		if (cstate == .IncomingReceived || cstate == .OutgoingInit || cstate == .Connected || cstate == .StreamsRunning) {
-			if (video && !CoreManager.speaker_already_enabled && !CallManager.instance().bluetoothEnabled) {
-				CallManager.instance().setSpeakerEnabled(enable: true)
-				CoreManager.speaker_already_enabled = true
+			if (video && !CoreManagerDelegate.speaker_already_enabled && !CallManager.instance().bluetoothEnabled) {
+				CallManager.instance().enableSpeaker(enable: true)
+				CoreManagerDelegate.speaker_already_enabled = true
 			}
 		}
 

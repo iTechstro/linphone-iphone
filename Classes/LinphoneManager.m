@@ -75,6 +75,8 @@ NSString *const kLinphoneFileTransferRecvUpdate = @"LinphoneFileTransferRecvUpda
 NSString *const kLinphoneQRCodeFound = @"LinphoneQRCodeFound";
 NSString *const kLinphoneChatCreateViewChange = @"LinphoneChatCreateViewChange";
 
+NSString *const kLinphoneMsgNotificationAppGroupId = @"group.org.linphone.phone.msgNotification";
+
 const int kLinphoneAudioVbrCodecDefaultBitrate = 36; /*you can override this from linphonerc or linphonerc-factory*/
 
 extern void libmsamr_init(MSFactory *factory);
@@ -240,6 +242,7 @@ struct codec_name_pref_table codec_pref_table[] = {{"speex", 8000, "speex_8k_pre
 		_pushDict = [[NSMutableDictionary alloc] init];
 		_database = NULL;
 		_conf = FALSE;
+		_canConfigurePushTokenForProxyConfigs = FALSE;
 		_fileTransferDelegates = [[NSMutableArray alloc] init];
 		_linphoneManagerAddressBookMap = [[OrderedDictionary alloc] init];
 		pushCallIDs = [[NSMutableArray alloc] init];
@@ -249,6 +252,8 @@ struct codec_name_pref_table codec_pref_table[] = {{"speex", 8000, "speex_8k_pre
 		[self copyDefaultSettings];
 		[self overrideDefaultSettings];
 
+        [self lpConfigSetString:[LinphoneManager dataFile:@"linphone.db"] forKey:@"uri" inSection:@"storage"];
+        [self lpConfigSetString:[LinphoneManager dataFile:@"x3dh.c25519.sqlite3"] forKey:@"x3dh_db_path" inSection:@"lime"];
 		// set default values for first boot
 		if ([self lpConfigStringForKey:@"debugenable_preference"] == nil) {
 #ifdef DEBUG
@@ -492,6 +497,13 @@ static void migrateWizardToAssistant(const char *entry, void *user_data) {
 			userInfo:nil]);
 	}
 	return theLinphoneCore;
+}
+
++ (BOOL)isLcInitialized {
+    if (theLinphoneCore == nil) {
+        return NO;
+    }
+    return YES;
 }
 
 #pragma mark Debug functions
@@ -840,135 +852,10 @@ static void linphone_iphone_popup_password_request(LinphoneCore *lc, LinphoneAut
 			return;
 	}
 
-	// Create a new notification
-	if (floor(NSFoundationVersionNumber) <= NSFoundationVersionNumber_iOS_9_x_Max) {
-		NSArray *actions;
-		if ([[UIDevice.currentDevice systemVersion] floatValue] < 9 ||
-		    [LinphoneManager.instance lpConfigBoolForKey:@"show_msg_in_notif"] == NO) {
-
-			UIMutableUserNotificationAction *reply = [[UIMutableUserNotificationAction alloc] init];
-			reply.identifier = @"reply";
-			reply.title = NSLocalizedString(@"Reply", nil);
-			reply.activationMode = UIUserNotificationActivationModeForeground;
-			reply.destructive = NO;
-			reply.authenticationRequired = YES;
-
-			UIMutableUserNotificationAction *mark_read = [[UIMutableUserNotificationAction alloc] init];
-			mark_read.identifier = @"mark_read";
-			mark_read.title = NSLocalizedString(@"Mark Read", nil);
-			mark_read.activationMode = UIUserNotificationActivationModeBackground;
-			mark_read.destructive = NO;
-			mark_read.authenticationRequired = NO;
-
-			actions = @[ mark_read, reply ];
-		} else {
-			// iOS 9 allows for inline reply. We don't propose mark_read in this case
-			UIMutableUserNotificationAction *reply_inline = [[UIMutableUserNotificationAction alloc] init];
-
-			reply_inline.identifier = @"reply_inline";
-			reply_inline.title = NSLocalizedString(@"Reply", nil);
-			reply_inline.activationMode = UIUserNotificationActivationModeBackground;
-			reply_inline.destructive = NO;
-			reply_inline.authenticationRequired = NO;
-			reply_inline.behavior = UIUserNotificationActionBehaviorTextInput;
-
-			actions = @[ reply_inline ];
-		}
-
-		UIMutableUserNotificationCategory *msgcat = [[UIMutableUserNotificationCategory alloc] init];
-		msgcat.identifier = @"incoming_msg";
-		[msgcat setActions:actions forContext:UIUserNotificationActionContextDefault];
-		[msgcat setActions:actions forContext:UIUserNotificationActionContextMinimal];
-
-		NSSet *categories = [NSSet setWithObjects:msgcat, nil];
-
-		UIUserNotificationSettings *set = [UIUserNotificationSettings settingsForTypes:(UIUserNotificationTypeAlert | UIUserNotificationTypeBadge | UIUserNotificationTypeSound)
-						   categories:categories];
-		[[UIApplication sharedApplication] registerUserNotificationSettings:set];
-
-		UILocalNotification *notif = [[UILocalNotification alloc] init];
-		if (notif) {
-			NSString *chat = [UIChatBubbleTextCell TextMessageForChat:msg];
-			notif.repeatInterval = 0;
-			if ([[UIDevice currentDevice].systemVersion floatValue] >= 8) {
-#pragma deploymate push "ignored-api-availability"
-				notif.category = @"incoming_msg";
-#pragma deploymate pop
-			}
-			if ([LinphoneManager.instance lpConfigBoolForKey:@"show_msg_in_notif" withDefault:YES]) {
-				notif.alertBody = [NSString stringWithFormat:NSLocalizedString(@"IM_FULLMSG", nil), from, chat];
-			} else {
-				notif.alertBody = [NSString stringWithFormat:NSLocalizedString(@"IM_MSG", nil), from];
-			}
-			notif.alertAction = NSLocalizedString(@"Show", nil);
-			notif.soundName = @"msg.caf";
-			notif.userInfo = @{@"from" : from, @"peer_addr" : peer_uri, @"local_addr" : local_uri, @"call-id" : callID};
-			notif.accessibilityLabel = @"Message notif";
-			[[UIApplication sharedApplication] presentLocalNotificationNow:notif];
-		}
-	} else {
-		UNMutableNotificationContent *content = [[UNMutableNotificationContent alloc] init];
-		content.title = NSLocalizedString(@"Message received", nil);
-		const char* subject = linphone_chat_room_get_subject(room) ?: LINPHONE_DUMMY_SUBJECT;
-		if ([LinphoneManager.instance lpConfigBoolForKey:@"show_msg_in_notif" withDefault:YES]) {
-			content.subtitle = strcmp(subject, LINPHONE_DUMMY_SUBJECT) != 0 ? [NSString stringWithUTF8String:subject] : fromMsg;
-			content.body = strcmp(subject, LINPHONE_DUMMY_SUBJECT) != 0
-				? [NSString stringWithFormat:@"%@ : %@", fromMsg, [UIChatBubbleTextCell TextMessageForChat:msg]]
-				: [UIChatBubbleTextCell TextMessageForChat:msg];
-		} else {
-			content.body = strcmp(subject, LINPHONE_DUMMY_SUBJECT) != 0
-				? [NSString stringWithFormat:@"%@ : %@",[NSString stringWithUTF8String:subject], fromMsg]
-				: fromMsg;
-		}
-		content.sound = [UNNotificationSound soundNamed:@"msg.caf"];
-		content.categoryIdentifier = @"msg_cat";
-		// save data to user info for rich notification content
-		NSMutableArray *msgs = [NSMutableArray array];
-		bctbx_list_t *history = linphone_chat_room_get_history(room, 6);
-		while (history) {
-			NSMutableDictionary *msgData = [NSMutableDictionary dictionary];
-			LinphoneChatMessage *msg = history->data;
-			const char *state = linphone_chat_message_state_to_string(linphone_chat_message_get_state(msg));
-			bool_t isOutgoing = linphone_chat_message_is_outgoing(msg);
-			bool_t isFileTransfer = (linphone_chat_message_get_file_transfer_information(msg) != NULL);
-			const LinphoneAddress *fromAddress = linphone_chat_message_get_from_address(msg);
-			NSString *displayNameDate = [NSString stringWithFormat:@"%@ - %@", [LinphoneUtils timeToString:linphone_chat_message_get_time(msg)
-											    withFormat:LinphoneDateChatBubble],
-						     [FastAddressBook displayNameForAddress:fromAddress]];
-			UIImage *fromImage = [UIImage resizeImage:[FastAddressBook imageForAddress:fromAddress]
-					      withMaxWidth:200
-					      andMaxHeight:200];
-			NSData *fromImageData = UIImageJPEGRepresentation(fromImage, 1);
-			[msgData setObject:[NSString stringWithUTF8String:state] forKey:@"state"];
-			[msgData setObject:displayNameDate forKey:@"displayNameDate"];
-			[msgData setObject:[NSNumber numberWithBool:isFileTransfer] forKey:@"isFileTransfer"];
-			[msgData setObject:fromImageData forKey:@"fromImageData"];
-			if (isFileTransfer) {
-				LinphoneContent *file = linphone_chat_message_get_file_transfer_information(msg);
-				const char *filename = linphone_content_get_name(file);
-				[msgData setObject:[NSString stringWithUTF8String:filename] forKey:@"msg"];
-			} else {
-				[msgData setObject:[UIChatBubbleTextCell TextMessageForChat:msg] forKey:@"msg"];
-			}
-			[msgData setObject:[NSNumber numberWithBool:isOutgoing] forKey:@"isOutgoing"];
-			[msgs addObject:msgData];
-			history = bctbx_list_next(history);
-		}
-		content.userInfo = @{@"from" : from, @"peer_addr" : peer_uri, @"local_addr" : local_uri, @"CallId" : callID, @"msgs" : msgs};
-		content.accessibilityLabel = @"Message notif";
-		UNNotificationRequest *req = [UNNotificationRequest requestWithIdentifier:@"call_request" content:content trigger:NULL];
-		[[UNUserNotificationCenter currentNotificationCenter]
-		 addNotificationRequest:req
-		 withCompletionHandler:^(NSError *_Nullable error) {
-				// Enable or disable features based on authorization.
-				if (error) {
-					LOGD(@"Error while adding notification request :");
-					LOGD(error.description);
-				}
-			}];
-	}
-	[ChatsListTableView saveDataToUserDefaults];
-	[HistoryListTableView saveDataToUserDefaults];
+    // don't show msg notif when app in bg during a call : msgNotificationService extension will show a notif
+    if ([UIApplication sharedApplication].applicationState == UIApplicationStateBackground) {
+        return;
+    }
 }
 
 static void linphone_iphone_message_received(LinphoneCore *lc, LinphoneChatRoom *room, LinphoneChatMessage *message) {
@@ -1151,6 +1038,15 @@ void linphone_iphone_qr_code_found(LinphoneCore *lc, const char *result) {
 	[NSNotificationCenter.defaultCenter postNotificationName:kLinphoneQRCodeFound object:nil userInfo:eventDic];
 }
 
+static void linphone_iphone_call_log_updated(LinphoneCore *lc, LinphoneCallLog *newcl) {
+	if (linphone_call_log_get_status(newcl) == LinphoneCallEarlyAborted) {
+		const char *cid = linphone_call_log_get_call_id(newcl);
+		if (cid) {
+			[CallManager.instance markCallAsDeclinedWithCallId:[NSString stringWithUTF8String:cid]];
+		}
+	}
+}
+
 #pragma mark - Message composition start
 - (void)onMessageComposeReceived:(LinphoneCore *)core forRoom:(LinphoneChatRoom *)room {
 	[NSNotificationCenter.defaultCenter postNotificationName:kLinphoneTextComposeEvent
@@ -1200,20 +1096,13 @@ static void linphone_iphone_is_composing_received(LinphoneCore *lc, LinphoneChat
 
 // scheduling loop
 - (void)iterate {
-	UIBackgroundTaskIdentifier coreIterateTaskId = 0;
-	coreIterateTaskId = [[UIApplication sharedApplication] beginBackgroundTaskWithExpirationHandler:^{
-			LOGW(@"Background task for core iteration launching expired.");
-			[[UIApplication sharedApplication] endBackgroundTask:coreIterateTaskId];
-		}];
 	linphone_core_iterate(theLinphoneCore);
-	if (coreIterateTaskId != UIBackgroundTaskInvalid)
-		[[UIApplication sharedApplication] endBackgroundTask:coreIterateTaskId];
 }
 
 /** Should be called once per linphone_core_new() */
 - (void)finishCoreConfiguration {
 	//Force keep alive to workaround push notif on chat message
-	linphone_core_enable_keep_alive(theLinphoneCore, true);
+	linphone_core_enable_keep_alive([LinphoneManager getLc], true);
 
 	// get default config from bundle
 	NSString *zrtpSecretsFileName = [LinphoneManager dataFile:@"zrtp_secrets"];
@@ -1273,9 +1162,6 @@ static void linphone_iphone_is_composing_received(LinphoneCore *lc, LinphoneChat
 
 	[self enableProxyPublish:([UIApplication sharedApplication].applicationState == UIApplicationStateActive)];
 
-	//update UserDefaults for widgets
-	[HistoryListTableView saveDataToUserDefaults];
-
 	LOGI(@"Linphone [%s] started on [%s]", linphone_core_get_version(), [[UIDevice currentDevice].model UTF8String]);
 
 	// Post event
@@ -1288,7 +1174,7 @@ static void linphone_iphone_is_composing_received(LinphoneCore *lc, LinphoneChat
 
 static BOOL libStarted = FALSE;
 
-- (void)startLinphoneCore {
+- (void)launchLinphoneCore {
 
 	if (libStarted) {
 		LOGE(@"Liblinphone is already initialized!");
@@ -1396,6 +1282,11 @@ void popup_link_account_cb(LinphoneAccountCreator *creator, LinphoneAccountCreat
 	}
 }
 
+- (void)startLinphoneCore {
+    linphone_core_start([LinphoneManager getLc]);
+	[CoreManager.instance startIterateTimer];
+}
+
 - (void)createLinphoneCore {
 	[self migrationAllPre];
 	if (theLinphoneCore != nil) {
@@ -1437,12 +1328,14 @@ void popup_link_account_cb(LinphoneAccountCreator *creator, LinphoneAccountCreat
 	linphone_core_cbs_set_chat_room_state_changed(cbs, linphone_iphone_chatroom_state_changed);
 	linphone_core_cbs_set_version_update_check_result_received(cbs, linphone_iphone_version_update_check_result_received);
 	linphone_core_cbs_set_qrcode_found(cbs, linphone_iphone_qr_code_found);
+	linphone_core_cbs_set_call_log_updated(cbs, linphone_iphone_call_log_updated);
 	linphone_core_cbs_set_user_data(cbs, (__bridge void *)(self));
 
-	theLinphoneCore = linphone_factory_create_core_with_config_3(factory, _configDb, NULL);
+	theLinphoneCore = linphone_factory_create_shared_core_with_config(factory, _configDb, NULL, [kLinphoneMsgNotificationAppGroupId UTF8String], true);
 	linphone_core_add_callbacks(theLinphoneCore, cbs);
 
 	[CallManager.instance setCoreWithCore:theLinphoneCore];
+	[CoreManager.instance setCoreWithCore:theLinphoneCore];
 	[ConfigManager.instance setDbWithDb:_configDb];
 
 	linphone_core_start(theLinphoneCore);
@@ -1486,12 +1379,11 @@ void popup_link_account_cb(LinphoneAccountCreator *creator, LinphoneAccountCreat
 	 * grab, if any */
 	[self iterate];
 	// start scheduler
-	mIterateTimer =
-		[NSTimer scheduledTimerWithTimeInterval:0.02 target:self selector:@selector(iterate) userInfo:nil repeats:YES];
+	[CoreManager.instance startIterateTimer];
 }
 
 - (void)destroyLinphoneCore {
-	[mIterateTimer invalidate];
+	[CoreManager.instance stopIterateTimer];
 	// just in case
 	[self removeCTCallCenterCb];
 
@@ -1592,77 +1484,6 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 		}];
 	LOGI(@"Long running task started, remaining [%@] because at least one call is paused",
 	     [LinphoneUtils intervalToString:[[UIApplication sharedApplication] backgroundTimeRemaining]]);
-}
-
-- (void)startPushLongRunningTask:(NSString *)loc_key callId:(NSString *)callId {
-	if (!callId)
-		return;
-
-	if ([callId isEqualToString:@""])
-		return;
-
-	if ([loc_key isEqualToString:@"IM_MSG"]) {
-		[[UIApplication sharedApplication] endBackgroundTask:pushBgTaskMsg];
-		pushBgTaskMsg = 0;
-		pushBgTaskMsg = [[UIApplication sharedApplication] beginBackgroundTaskWithExpirationHandler:^{
-				if ([UIApplication sharedApplication].applicationState != UIApplicationStateActive) {
-					LOGW(@"Incomming message with call-id [%@] couldn't be received", callId);
-					UNMutableNotificationContent *content = [[UNMutableNotificationContent alloc] init];
-					content.title = NSLocalizedString(@"Message received", nil);
-					content.body = NSLocalizedString(@"You have received a message.", nil);
-					content.categoryIdentifier = @"push_msg";
-
-					UNNotificationRequest *req =
-					[UNNotificationRequest requestWithIdentifier:@"push_msg" content:content trigger:NULL];
-					[[UNUserNotificationCenter currentNotificationCenter]
-					 addNotificationRequest:req
-					 withCompletionHandler:^(NSError *_Nullable error) {
-							// Enable or disable features based on authorization.
-							if (error) {
-								LOGD(@"Error while adding notification request :");
-								LOGD(error.description);
-							}
-						}];
-				}
-				for (NSString *key in [LinphoneManager.instance.pushDict allKeys]) {
-					[LinphoneManager.instance.pushDict setValue:[NSNumber numberWithInt:0] forKey:key];
-				}
-				[[UIApplication sharedApplication] endBackgroundTask:pushBgTaskMsg];
-				pushBgTaskMsg = 0;
-			}];
-		LOGI(@"Message long running task started for call-id [%@], remaining [%@] because a push has been received",
-		     callId, [LinphoneUtils intervalToString:[[UIApplication sharedApplication] backgroundTimeRemaining]]);
-	} else if ([loc_key isEqualToString:@"IC_MSG"]) {
-		[[UIApplication sharedApplication] endBackgroundTask:pushBgTaskCall];
-		pushBgTaskCall = 0;
-		pushBgTaskCall = [[UIApplication sharedApplication] beginBackgroundTaskWithExpirationHandler:^{
-				//does not make sens to notify user as we have no information on this missed called
-				for (NSString *key in [LinphoneManager.instance.pushDict allKeys]) {
-					[LinphoneManager.instance.pushDict setValue:[NSNumber numberWithInt:0] forKey:key];
-				}
-				[[UIApplication sharedApplication] endBackgroundTask:pushBgTaskCall];
-				pushBgTaskCall = 0;
-			}];
-		LOGI(@"Call long running task started for call-id [%@], remaining [%@] because a push has been received",
-		     callId, [LinphoneUtils intervalToString:[[UIApplication sharedApplication] backgroundTimeRemaining]]);
-	} else if ([loc_key isEqualToString:@"IC_SIL"]) {
-		[[UIApplication sharedApplication] endBackgroundTask:pushBgTaskRefer];
-		pushBgTaskRefer = 0;
-		pushBgTaskRefer = [[UIApplication sharedApplication] beginBackgroundTaskWithExpirationHandler:^{
-				// Could be or not an error since the app doesn't know when to end the background task for a REFER
-				// TODO: Manage pushes in the SDK
-				if ([UIApplication sharedApplication].applicationState != UIApplicationStateActive)
-					LOGI(@"Incomming refer long running task with call-id [%@] has expired", callId);
-
-				for (NSString *key in [LinphoneManager.instance.pushDict allKeys]) {
-					[LinphoneManager.instance.pushDict setValue:[NSNumber numberWithInt:0] forKey:key];
-				}
-				[[UIApplication sharedApplication] endBackgroundTask:pushBgTaskRefer];
-				pushBgTaskRefer = 0;
-			}];
-		LOGI(@"Refer long running task started for call-id [%@], remaining [%@] because a push has been received",
-		     callId, [LinphoneUtils intervalToString:[[UIApplication sharedApplication] backgroundTimeRemaining]]);
-	}
 }
 
 - (void)enableProxyPublish:(BOOL)enabled {
@@ -1812,25 +1633,40 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 }
 
 - (void)migrateImportantFiles {
-    if ([LinphoneManager copyFile:[LinphoneManager documentFile:@"linphonerc"] destination:[LinphoneManager preferenceFile:@"linphonerc"] override:TRUE ignore:TRUE])
-        [NSFileManager.defaultManager
-         removeItemAtPath:[LinphoneManager documentFile:@"linphonerc"]
-         error:nil];
-    
-    if ([LinphoneManager copyFile:[LinphoneManager documentFile:@"linphone_chats.db"] destination:[LinphoneManager dataFile:@"linphone_chats.db"] override:TRUE ignore:TRUE])
-        [NSFileManager.defaultManager
-         removeItemAtPath:[LinphoneManager documentFile:@"linphone_chats.db"]
-         error:nil];
-    
-    if ([LinphoneManager copyFile:[LinphoneManager documentFile:@"zrtp_secrets"] destination:[LinphoneManager dataFile:@"zrtp_secrets"] override:TRUE ignore:TRUE])
-        [NSFileManager.defaultManager
-         removeItemAtPath:[LinphoneManager documentFile:@"zrtp_secrets"]
-         error:nil];
-    
-    if ([LinphoneManager copyFile:[LinphoneManager documentFile:@"zrtp_secrets.bkp"] destination:[LinphoneManager dataFile:@"zrtp_secrets.bkp"] override:TRUE ignore:TRUE])
-        [NSFileManager.defaultManager
-         removeItemAtPath:[LinphoneManager documentFile:@"zrtp_secrets.bkp"]
-         error:nil];
+	if ([LinphoneManager copyFile:[LinphoneManager oldPreferenceFile:@"linphonerc"] destination:[LinphoneManager preferenceFile:@"linphonerc"] override:TRUE ignore:TRUE]) {
+		[NSFileManager.defaultManager
+		removeItemAtPath:[LinphoneManager oldPreferenceFile:@"linphonerc"]
+		error:nil];
+	} else if ([LinphoneManager copyFile:[LinphoneManager documentFile:@"linphonerc"] destination:[LinphoneManager preferenceFile:@"linphonerc"] override:TRUE ignore:TRUE]) {
+		[NSFileManager.defaultManager
+		removeItemAtPath:[LinphoneManager documentFile:@"linphonerc"]
+		error:nil];
+	}
+
+	if ([LinphoneManager copyFile:[LinphoneManager oldDataFile:@"linphone.db"] destination:[LinphoneManager dataFile:@"linphone.db"] override:TRUE ignore:TRUE]) {
+		[NSFileManager.defaultManager
+		removeItemAtPath:[LinphoneManager oldDataFile:@"linphone.db"]
+		error:nil];
+	}
+
+	if ([LinphoneManager copyFile:[LinphoneManager oldDataFile:@"x3dh.c25519.sqlite3"] destination:[LinphoneManager dataFile:@"x3dh.c25519.sqlite3"] override:TRUE ignore:TRUE]) {
+		[NSFileManager.defaultManager
+		removeItemAtPath:[LinphoneManager oldDataFile:@"x3dh.c25519.sqlite3"]
+		error:nil];
+	}
+
+	// call history
+	if ([LinphoneManager copyFile:[LinphoneManager oldDataFile:kLinphoneInternalChatDBFilename] destination:[LinphoneManager dataFile:kLinphoneInternalChatDBFilename] override:TRUE ignore:TRUE]) {
+		[NSFileManager.defaultManager
+		removeItemAtPath:[LinphoneManager oldDataFile:kLinphoneInternalChatDBFilename]
+		error:nil];
+	}
+
+	if ([LinphoneManager copyFile:[LinphoneManager oldDataFile:@"zrtp_secrets"] destination:[LinphoneManager dataFile:@"zrtp_secrets"] override:TRUE ignore:TRUE]) {
+		[NSFileManager.defaultManager
+		removeItemAtPath:[LinphoneManager oldDataFile:@"zrtp_secrets"]
+		error:nil];
+	}
 }
 
 - (void)renameDefaultSettings {
@@ -1869,8 +1705,8 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 	if (IPAD && [[NSFileManager defaultManager] fileExistsAtPath:factoryIpad]) {
 		factory = factoryIpad;
 	}
-	NSString *confiFileName = [LinphoneManager preferenceFile:@"linphonerc"];
-	_configDb = lp_config_new_with_factory([confiFileName UTF8String], [factory UTF8String]);
+	_configDb = linphone_config_new_for_shared_core(kLinphoneMsgNotificationAppGroupId.UTF8String, @"linphonerc".UTF8String, factory.UTF8String);
+	lp_config_clean_entry(_configDb, "misc", "max_calls");
 }
 #pragma mark - Audio route Functions
 
@@ -1908,7 +1744,7 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 
 - (void)setBluetoothEnabled:(BOOL)enable {
 	if (_bluetoothAvailable) {
-		// The change of route will be done in setSpeakerEnabled
+		// The change of route will be done in enableSpeaker
 		CallManager.instance.bluetoothEnabled = enable;
 		if (CallManager.instance.bluetoothEnabled) {
 			NSError *err = nil;
@@ -1926,7 +1762,7 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 			}
 		}
 	}
-	[CallManager.instance setSpeakerEnabled:CallManager.instance.speakerEnabled];
+	[CallManager.instance enableSpeakerWithEnable:CallManager.instance.speakerEnabled];
 }
 
 #pragma mark - Call Functions
@@ -1983,41 +1819,82 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 
 #pragma mark - Property Functions
 
-- (void)setPushNotificationToken:(NSData *)apushNotificationToken {
-	if (apushNotificationToken == _pushNotificationToken) {
+- (void)setPushKitToken:(NSData *)pushKitToken {
+	if (pushKitToken == _pushKitToken) {
 		return;
 	}
-	_pushNotificationToken = apushNotificationToken;
+	_pushKitToken = pushKitToken;
 
-	@try {
-		const MSList *proxies = linphone_core_get_proxy_config_list(LC);
-		while (proxies) {
-			[self configurePushTokenForProxyConfig:proxies->data];
-			proxies = proxies->next;
-		}
-	} @catch (NSException* e) {
-		LOGW(@"%s: linphone core not ready yet, ignoring push token", __FUNCTION__);
-	}
+    [self configurePushTokenForProxyConfigs];
+}
+
+- (void)setRemoteNotificationToken:(NSData *)remoteNotificationToken {
+    if (remoteNotificationToken == _remoteNotificationToken) {
+        return;
+    }
+    _remoteNotificationToken = remoteNotificationToken;
+
+    [self configurePushTokenForProxyConfigs];
+}
+
+- (void)configurePushTokenForProxyConfigs {
+    // we register only when the second token is set
+    if (_canConfigurePushTokenForProxyConfigs) {
+        @try {
+            const MSList *proxies = linphone_core_get_proxy_config_list(LC);
+            while (proxies) {
+                [self configurePushTokenForProxyConfig:proxies->data];
+                proxies = proxies->next;
+            }
+        } @catch (NSException* e) {
+            LOGW(@"%s: linphone core not ready yet, ignoring push token", __FUNCTION__);
+        }
+    } else {
+        _canConfigurePushTokenForProxyConfigs = YES;
+    }
+
 }
 
 - (void)configurePushTokenForProxyConfig:(LinphoneProxyConfig *)proxyCfg {
 	linphone_proxy_config_edit(proxyCfg);
 
-	NSData *tokenData = _pushNotificationToken;
+	NSData *remoteTokenData = _remoteNotificationToken;
+    NSData *PKTokenData = _pushKitToken;
 	BOOL pushNotifEnabled = linphone_proxy_config_is_push_notification_allowed(proxyCfg);
-	if (tokenData != nil && pushNotifEnabled) {
-		const unsigned char *tokenBuffer = [tokenData bytes];
-		NSMutableString *tokenString = [NSMutableString stringWithCapacity:[tokenData length] * 2];
-		for (int i = 0; i < [tokenData length]; ++i) {
-			[tokenString appendFormat:@"%02X", (unsigned int)tokenBuffer[i]];
+	if ((remoteTokenData != nil || PKTokenData != nil) && pushNotifEnabled) {
+
+        const unsigned char *remoteTokenBuffer = [remoteTokenData bytes];
+        NSMutableString *remoteTokenString = [NSMutableString stringWithCapacity:[remoteTokenData length] * 2];
+		for (int i = 0; i < [remoteTokenData length]; ++i) {
+			[remoteTokenString appendFormat:@"%02X", (unsigned int)remoteTokenBuffer[i]];
 		}
+
+        const unsigned char *PKTokenBuffer = [PKTokenData bytes];
+        NSMutableString *PKTokenString = [NSMutableString stringWithCapacity:[PKTokenData length] * 2];
+        for (int i = 0; i < [PKTokenData length]; ++i) {
+            [PKTokenString appendFormat:@"%02X", (unsigned int)PKTokenBuffer[i]];
+        }
+
+        NSString *token;
+        NSString *services;
+        if (remoteTokenString && PKTokenString) {
+            token = [NSString stringWithFormat:@"%@:remote&%@:voip", remoteTokenString, PKTokenString];
+            services = @"remote&voip";
+        } else if (remoteTokenString) {
+            token = [NSString stringWithFormat:@"%@:remote", remoteTokenString];
+            services = @"remote";
+        } else {
+            token = [NSString stringWithFormat:@"%@:voip", PKTokenString];
+            services = @"voip";
+        }
+
 		// NSLocalizedString(@"IC_MSG", nil); // Fake for genstrings
 		// NSLocalizedString(@"IM_MSG", nil); // Fake for genstrings
 		// NSLocalizedString(@"IM_FULLMSG", nil); // Fake for genstrings
 #ifdef DEBUG
-#define APPMODE_SUFFIX @"dev"
+#define APPMODE_SUFFIX @".dev"
 #else
-#define APPMODE_SUFFIX @"prod"
+#define APPMODE_SUFFIX @""
 #endif
 		NSString *ring =
 			([LinphoneManager bundleFile:[self lpConfigStringForKey:@"local_ring" inSection:@"sound"].lastPathComponent]
@@ -2031,13 +1908,16 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 			timeout = @"";
 		}
 
-		NSString *params = [NSString
-				    stringWithFormat:@"app-id=%@.voip.%@;pn-type=apple;pn-tok=%@;pn-msg-str=IM_MSG;pn-call-str=IC_MSG;pn-"
-				    @"call-snd=%@;pn-msg-snd=msg.caf%@;pn-silent=1",
-				    [[NSBundle mainBundle] bundleIdentifier], APPMODE_SUFFIX, tokenString, ring, timeout];
+		// dummy value, for later use
+		NSString *teamId = @"ABCD1234";
+
+        NSString *params = [NSString
+                    stringWithFormat:@"pn-provider=apns%@;pn-prid=%@;pn-param=%@.%@.%@;pn-msg-str=IM_MSG;pn-call-str=IC_MSG;pn-groupchat-str=GC_MSG;pn-"
+                    @"call-snd=%@;pn-msg-snd=msg.caf%@;pn-silent=1",
+                    APPMODE_SUFFIX, token, teamId, [[NSBundle mainBundle] bundleIdentifier], services, ring, timeout];
 
 		LOGI(@"Proxy config %s configured for push notifications with contact: %@",
-		     linphone_proxy_config_get_identity(proxyCfg), params);
+		linphone_proxy_config_get_identity(proxyCfg), params);
 		linphone_proxy_config_set_contact_uri_parameters(proxyCfg, [params UTF8String]);
 		linphone_proxy_config_set_contact_parameters(proxyCfg, NULL);
 	} else {
@@ -2073,44 +1953,20 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 }
 
 + (NSString *)preferenceFile:(NSString *)file {
-	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
-	NSString *writablePath = [paths objectAtIndex:0];
-	NSString *fullPath = [writablePath stringByAppendingString:@"/Preferences/linphone/"];
-	if (![[NSFileManager defaultManager] fileExistsAtPath:fullPath]) {
-		NSError *error;
-		LOGI(@"Preference path %@ does not exist, creating it.",fullPath);
-		if (![[NSFileManager defaultManager] createDirectoryAtPath:fullPath
-		      withIntermediateDirectories:YES
-		      attributes:nil
-		      error:&error]) {
-			LOGE(@"Create preference path directory error: %@",error.description);
-		}
-	}
-    
+	LinphoneFactory *factory = linphone_factory_get();
+	NSString *fullPath = [NSString stringWithUTF8String:linphone_factory_get_config_dir(factory, kLinphoneMsgNotificationAppGroupId.UTF8String)];
 	return [fullPath stringByAppendingPathComponent:file];
 }
 
 + (NSString *)dataFile:(NSString *)file {
-	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
-	NSString *writablePath = [paths objectAtIndex:0];
-	NSString *fullPath = [writablePath stringByAppendingString:@"/linphone/"];
-	if (![[NSFileManager defaultManager] fileExistsAtPath:fullPath]) {
-		NSError *error;
-		LOGI(@"Data path %@ does not exist, creating it.",fullPath);
-		if (![[NSFileManager defaultManager] createDirectoryAtPath:fullPath
-		      withIntermediateDirectories:YES
-		      attributes:nil
-		      error:&error]) {
-			LOGE(@"Create data path directory error: %@",error.description);
-		}
-	}
-    
+	LinphoneFactory *factory = linphone_factory_get();
+	NSString *fullPath = [NSString stringWithUTF8String:linphone_factory_get_data_dir(factory, kLinphoneMsgNotificationAppGroupId.UTF8String)];
 	return [fullPath stringByAppendingPathComponent:file];
 }
 
 + (NSString *)cacheDirectory {
-	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
-	NSString *cachePath = [paths objectAtIndex:0];
+	LinphoneFactory *factory = linphone_factory_get();
+	NSString *cachePath = [NSString stringWithUTF8String:linphone_factory_get_download_dir(factory, kLinphoneMsgNotificationAppGroupId.UTF8String)];
 	BOOL isDir = NO;
 	NSError *error;
 	// cache directory must be created if not existing
@@ -2121,6 +1977,20 @@ static int comp_call_state_paused(const LinphoneCall *call, const void *param) {
 		 error:&error];
 	}
 	return cachePath;
+}
+
++ (NSString *)oldPreferenceFile:(NSString *)file {
+	// migration
+	LinphoneFactory *factory = linphone_factory_get();
+	NSString *fullPath = [NSString stringWithUTF8String:linphone_factory_get_config_dir(factory, nil)];
+	return [fullPath stringByAppendingPathComponent:file];
+}
+
++ (NSString *)oldDataFile:(NSString *)file {
+	// migration
+	LinphoneFactory *factory = linphone_factory_get();
+	NSString *fullPath = [NSString stringWithUTF8String:linphone_factory_get_data_dir(factory, nil)];
+	return [fullPath stringByAppendingPathComponent:file];
 }
 
 + (int)unreadMessageCount {

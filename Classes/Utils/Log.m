@@ -21,8 +21,8 @@
 #import <asl.h>
 #import <os/log.h>
 
-#ifdef USE_CRASHLYTHICSS
-#import <Crashlytics/Crashlytics.h>
+#ifdef USE_CRASHLYTICS
+@import FirebaseCrashlytics;
 #endif
 
 @implementation Log
@@ -30,22 +30,6 @@
 #define FILE_SIZE 17
 #define DOMAIN_SIZE 3
 
-+ (NSString *)cacheDirectory {
-	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
-	NSString *cachePath = [paths objectAtIndex:0];
-	BOOL isDir = NO;
-	NSError *error;
-	// cache directory must be created if not existing
-	if (![[NSFileManager defaultManager] fileExistsAtPath:cachePath isDirectory:&isDir] && isDir == NO) {
-		if (![[NSFileManager defaultManager] createDirectoryAtPath:cachePath
-									   withIntermediateDirectories:NO
-														attributes:nil
-															 error:&error]) {
-			LOGE(@"Could not create cache directory: %@", error);
-		}
-	}
-	return cachePath;
-}
 
 + (void)log:(OrtpLogLevel)severity file:(const char *)file line:(int)line format:(NSString *)format, ... {
 	va_list args;
@@ -64,7 +48,7 @@
 		asl_add_log_file(NULL, STDERR_FILENO);
 		stderrInUse = YES;
 	}
-	linphone_core_set_log_collection_path([self cacheDirectory].UTF8String);
+	linphone_core_set_log_collection_path([LinphoneManager cacheDirectory].UTF8String);
 	linphone_core_set_log_handler(linphone_iphone_log_handler);
 	linphone_core_enable_log_collection(enabled);
 	if (level == 0) {
@@ -122,20 +106,17 @@ void linphone_iphone_log_handler(const char *domain, OrtpLogLevel lev, const cha
 		for (int i = 0; i < myWords.count; i++) {
 			NSString *tab = i > 0 ? @"\t" : @"";
 			if (((NSString *)myWords[i]).length > 0) {
-#ifdef USE_CRASHLYTHICSS
-				CLSNSLog(@"[%@] %@%@", lvl, tab, (NSString *)myWords[i]);
-#else
-				NSLog(@"[%@] %@%@", lvl, tab, (NSString *)myWords[i]);
+#ifdef USE_CRASHLYTICS
+			[[FIRCrashlytics crashlytics] logWithFormat:@"[%@] %@%@", lvl, tab, (NSString *)myWords[i]];
 #endif
-
+			NSLog(@"[%@] %@%@", lvl, tab, (NSString *)myWords[i]);
 			}
 		}
 	} else {
-#ifdef USE_CRASHLYTHICSS
-		CLSNSLog(@"[%@] %@", lvl, [formatedString stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"]);
-#else
-		NSLog(@"[%@] %@", lvl, [formatedString stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"]);
+#ifdef USE_CRASHLYTICS
+		[[FIRCrashlytics crashlytics] logWithFormat:@"[%@] %@", lvl, [formatedString stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"]];
 #endif
+		NSLog(@"[%@] %@", lvl, [formatedString stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"]);
 	}
 }
 

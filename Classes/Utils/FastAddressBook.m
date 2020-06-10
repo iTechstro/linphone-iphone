@@ -152,6 +152,11 @@
 	if ((self = [super init]) != nil) {
 		store = [[CNContactStore alloc] init];
 		_addressBookMap = [NSMutableDictionary dictionary];
+
+		[NSNotificationCenter.defaultCenter addObserver:self
+		selector:@selector(onPresenceChanged:)
+			name:kLinphoneNotifyPresenceReceivedForUriOrTel
+			object:nil];
 	}
 	self.needToUpdate = FALSE;
 	if (floor(NSFoundationVersionNumber) >= NSFoundationVersionNumber_iOS_9_x_Max) {
@@ -198,28 +203,30 @@
 			}];
 		}
 
-	}];
-	// load Linphone friends
-	const MSList *lists = linphone_core_get_friends_lists(LC);
-	while (lists) {
-		LinphoneFriendList *fl = lists->data;
-		const MSList *friends = linphone_friend_list_get_friends(fl);
-		while (friends) {
-			LinphoneFriend *f = friends->data;
-			// only append friends that are not native contacts (already added
-			// above)
-			if (linphone_friend_get_ref_key(f) == NULL) {
-				Contact *contact = [[Contact alloc] initWithFriend:f];
-				[self registerAddrsFor:contact];
+		// load Linphone friends
+		const MSList *lists = linphone_core_get_friends_lists(LC);
+		while (lists) {
+			LinphoneFriendList *fl = lists->data;
+			const MSList *friends = linphone_friend_list_get_friends(fl);
+			while (friends) {
+				LinphoneFriend *f = friends->data;
+				// only append friends that are not native contacts (already added
+				// above)
+				if (linphone_friend_get_ref_key(f) == NULL) {
+					Contact *contact = [[Contact alloc] initWithFriend:f];
+					[self registerAddrsFor:contact];
+				}
+				friends = friends->next;
 			}
-			friends = friends->next;
+			linphone_friend_list_update_subscriptions(fl);
+			lists = lists->next;
 		}
-		linphone_friend_list_update_subscriptions(fl);
-		lists = lists->next;
-	}
-	[NSNotificationCenter.defaultCenter
-	 postNotificationName:kLinphoneAddressBookUpdate
-	 object:self];
+		[self dumpContactsDisplayNamesToUserDefaults];
+
+		[NSNotificationCenter.defaultCenter
+		 postNotificationName:kLinphoneAddressBookUpdate
+		 object:self];
+	}];
 }
 
 -(void) updateAddressBook:(NSNotification*) notif {
@@ -349,6 +356,8 @@
 }
 
 - (BOOL)deleteContact:(Contact *)contact {
+	[self removeContactFromUserDefaults:contact];
+
 	CNSaveRequest *saveRequest = [[CNSaveRequest alloc] init];
 	NSArray *keysToFetch = @[
 							 CNContactEmailAddressesKey, CNContactPhoneNumbersKey,
@@ -488,4 +497,125 @@
 		lists = lists->next;
 	}
 }
+
+- (void)reloadFriends {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		[_addressBookMap enumerateKeysAndObjectsUsingBlock:^(NSString *name, Contact *contact, BOOL *stop) {
+			[contact reloadFriend];
+		}];
+	});
+}
+
+- (void)clearFriends {
+	[_addressBookMap enumerateKeysAndObjectsUsingBlock:^(NSString *name, Contact *contact, BOOL *stop) {
+		[contact clearFriend];
+	}];
+}
+
+- (void)dumpContactsDisplayNamesToUserDefaults {
+	LOGD(@"dumpContactsDisplayNamesToUserDefaults");
+	NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:kLinphoneMsgNotificationAppGroupId];
+	__block NSDictionary *oldDisplayNames = [defaults dictionaryForKey:@"addressBook"];
+	LinphoneProxyConfig *cfg = linphone_core_get_default_proxy_config(LC);
+
+	__block NSMutableDictionary *displayNames = [[NSMutableDictionary dictionary] init];
+	[_addressBookMap enumerateKeysAndObjectsUsingBlock:^(NSString *name, Contact *contact, BOOL *stop) {
+		if ([FastAddressBook isSipURIValid:name]) {
+			NSString *key = name;
+			LinphoneAddress *addr = linphone_address_new(name.UTF8String);
+
+			if (addr && linphone_proxy_config_is_phone_number(cfg, linphone_address_get_username(addr))) {
+				if (oldDisplayNames[name] != nil && [FastAddressBook isSipURI:oldDisplayNames[name]]) {
+					NSString *addrForTel = [NSString stringWithString:oldDisplayNames[name]];
+					/* we keep the link between tel number and sip addr to have the information quickly.
+					 If we don't do that, between the startup and presence callback we don't have the dispay name for this address */
+					LOGD(@"add %s -> %s link to userdefaults", name.UTF8String, addrForTel.UTF8String);
+					[displayNames setObject:addrForTel forKey:name];
+					key = addrForTel;
+				}
+			}
+			LOGD(@"add %s to userdefaults", key.UTF8String);
+			[displayNames setObject:[contact displayName] forKey:key];
+			linphone_address_unref(addr);
+		} else {
+			LOGD(@"cannot add %s to userdefaults: bad sip address", name.UTF8String);
+		}
+	}];
+
+	[defaults setObject:displayNames forKey:@"addressBook"];
+}
+
+- (void)removeContactFromUserDefaults:(Contact *)contact {
+	LOGD(@"removeContactFromUserDefaults contact: [%p]", contact);
+	NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:kLinphoneMsgNotificationAppGroupId];
+	NSMutableDictionary *displayNames = [[NSMutableDictionary alloc] initWithDictionary:[defaults dictionaryForKey:@"addressBook"]];
+	if (displayNames == nil) return;
+
+	LinphoneProxyConfig *cfg = linphone_core_create_proxy_config(LC);
+	for (NSString *phone in contact.phones) {
+		char *normalizedPhone = cfg? linphone_proxy_config_normalize_phone_number(linphone_core_get_default_proxy_config(LC), phone.UTF8String) : nil;
+		NSString *name = [FastAddressBook normalizeSipURI:normalizedPhone ? [NSString stringWithUTF8String:normalizedPhone] : phone];
+		if (phone != NULL) {
+			if ([FastAddressBook isSipURI:displayNames[name]]) {
+				LOGD(@"removed %s from userdefaults addressBook", ((NSString *)displayNames[name]).UTF8String);
+				[displayNames removeObjectForKey:displayNames[name]];
+			}
+			[displayNames removeObjectForKey:name];
+			LOGD(@"removed %s from userdefaults addressBook", ((NSString *)name).UTF8String);
+		}
+
+		if (normalizedPhone)
+			ms_free(normalizedPhone);
+	}
+
+	NSMutableArray *addresses = contact.sipAddresses;
+	for (id addr in addresses) {
+		[displayNames removeObjectForKey:addr];
+		LOGD(@"removed %s from userdefaults addressBook", ((NSString *)addr).UTF8String);
+	}
+
+	[defaults setObject:displayNames forKey:@"addressBook"];
+}
+
+- (void)onPresenceChanged:(NSNotification *)k {
+	NSString *uri = [NSString stringWithUTF8String:[[k.userInfo valueForKey:@"uri"] pointerValue]];
+	NSString *telAddr;
+
+	if ([FastAddressBook isSipURI:uri]) {
+		LinphoneAddress *addr = linphone_address_new(uri.UTF8String);
+		if (linphone_proxy_config_is_phone_number(linphone_core_get_default_proxy_config(LC), linphone_address_get_username(addr))) {
+			telAddr = uri;
+		}
+		linphone_address_unref(addr);
+	} else {
+		telAddr = [FastAddressBook normalizeSipURI:uri];
+	}
+
+	if (telAddr) {
+		LOGD(@"presence changed for tel [%s]", telAddr.UTF8String);
+
+		NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:kLinphoneMsgNotificationAppGroupId];
+		NSMutableDictionary *displayNames = [[NSMutableDictionary alloc] initWithDictionary:[defaults dictionaryForKey:@"addressBook"]];
+		if (displayNames == nil) return;
+
+		id displayName = [displayNames objectForKey:telAddr];
+		if (displayName == nil) return;
+
+		const LinphonePresenceModel *m = [[k.userInfo valueForKey:@"presence_model"] pointerValue];
+		NSString *contact = [NSString stringWithUTF8String:linphone_presence_model_get_contact(m)];
+		NSString *sipAddr = [FastAddressBook normalizeSipURI:contact];
+
+		if (sipAddr != nil && [displayNames objectForKey:sipAddr] == nil) {
+			[displayNames setObject:displayName forKey:sipAddr];
+			[displayNames removeObjectForKey:telAddr];
+			[displayNames setObject:sipAddr forKey:telAddr];
+			LOGD(@"add %s -> %s link to userdefaults", telAddr.UTF8String, sipAddr.UTF8String);
+			/* we keep the link between tel number and sip addr to have the information on the next startup.
+			 If we don't do that, between the startup and this callback we don't have the dispay name for this address */
+			LOGD(@"Replaced %s by %s in userdefaults addressBook", telAddr.UTF8String, sipAddr.UTF8String);
+			[defaults setObject:displayNames forKey:@"addressBook"];
+		}
+	}
+}
+
 @end

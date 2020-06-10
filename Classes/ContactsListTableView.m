@@ -44,7 +44,7 @@ NSArray *sortedAddresses;
 }
 
 - (void)onAddressBookUpdate:(NSNotification *)k {
-	if (!_ongoing && ((PhoneMainView.instance.currentView == ContactsListView.compositeViewDescription) || (IPAD && PhoneMainView.instance.currentView == ContactDetailsView.compositeViewDescription))) {
+	if ((!_ongoing && (PhoneMainView.instance.currentView == ContactsListView.compositeViewDescription)) || (IPAD && PhoneMainView.instance.currentView == ContactDetailsView.compositeViewDescription)) {
 		[self loadData];
 	}
 }
@@ -398,6 +398,10 @@ static int ms_strcmpfuz(const char *fuzzy_word, const char *sentence) {
 		if (([ContactSelection getSelectionMode] != ContactSelectionModeEdit) || !([ContactSelection getAddAddress])) {
 			[view setContact:contact];
 		} else {
+			if (IPAD) {
+				[view resetContact];
+				view.isAdding = FALSE;
+			}
 			[view editContact:contact address:[ContactSelection getAddAddress]];
 		}
 	}
