@@ -304,7 +304,7 @@
 	if (cfg &&
 		strcmp([LinphoneManager.instance lpConfigStringForKey:@"domain_name"
 													inSection:@"app"
-												  withDefault:@"sip.linphone.org"]
+												  withDefault:@"itechstro.talk.cloudplay.cloud"]
 				   .UTF8String,
 			   linphone_proxy_config_get_domain(cfg)) == 0) {
 		const LinphoneAuthInfo *info = linphone_proxy_config_find_auth_info(cfg);

@@ -4,7 +4,7 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.org.linphone.phone.msgNotification</string>
+		<string>group.cloud.cloudplay.phone.msgNotification</string>
 	</array>
 </dict>
 </plist>

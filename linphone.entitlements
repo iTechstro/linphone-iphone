@@ -22,9 +22,9 @@
 	<string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.org.linphone.phone.linphoneExtension</string>
-		<string>group.belledonne-communications.linphone.widget</string>
-		<string>group.org.linphone.phone.msgNotification</string>
+		<string>group.cloud.cloudplay.phone.linphone.widget</string>
+		<string>group.cloud.cloudplay.phone.linphoneExtension</string>
+		<string>group.cloud.cloudplay.phone.msgNotification</string>
 	</array>
 </dict>
 </plist>

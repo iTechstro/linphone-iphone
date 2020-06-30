@@ -56,7 +56,15 @@
 	[super viewWillAppear:animated];
 
 	_sideMenuEntries = [[NSMutableArray alloc] init];
-
+    
+    [_sideMenuEntries
+        addObject:[[SideMenuEntry alloc] initWithTitle:NSLocalizedString(@"Settings", nil)
+                                                 image:[UIImage imageNamed:@"menu_options.png"]
+                                              tapBlock:^() {
+                                                [PhoneMainView.instance
+                                                    changeCurrentView:SettingsView.compositeViewDescription];
+                                              }]];
+    /*
 	[_sideMenuEntries
 		addObject:[[SideMenuEntry alloc] initWithTitle:NSLocalizedString(@"Assistant", nil)
                                                  image:[UIImage imageNamed:@"menu_assistant.png"]
@@ -75,14 +83,7 @@
 												  }]];
 	}
 
-    
-	[_sideMenuEntries
-		addObject:[[SideMenuEntry alloc] initWithTitle:NSLocalizedString(@"Settings", nil)
-                                                 image:[UIImage imageNamed:@"menu_options.png"]
-											  tapBlock:^() {
-												[PhoneMainView.instance
-													changeCurrentView:SettingsView.compositeViewDescription];
-											  }]];
+
     [_sideMenuEntries
      addObject:[[SideMenuEntry alloc] initWithTitle:NSLocalizedString(@"Recordings", nil)
                                               image:[UIImage imageNamed:@"menu_recordings.png"]
@@ -107,6 +108,7 @@
 																  changeCurrentView:AboutView.compositeViewDescription];
 
 															}]];
+    */
 }
 
 #pragma mark - Table View Controller

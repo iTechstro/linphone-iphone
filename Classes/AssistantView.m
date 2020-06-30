@@ -113,7 +113,7 @@ static UICompositeViewDescription *compositeDescription = nil;
 		new_config = NULL;
 		number_of_configs_before = bctbx_list_size(linphone_core_get_proxy_config_list(LC));
 		[self resetTextFields];
-		[self changeView:_welcomeView back:FALSE animation:FALSE];
+		[self changeView:_loginView back:FALSE animation:FALSE];
 	}
 	mustRestoreView = NO;
 	_outgoingView = DialerView.compositeViewDescription;
@@ -188,7 +188,7 @@ static UICompositeViewDescription *compositeDescription = nil;
 - (void)reset {
 	[LinphoneManager.instance removeAllAccounts];
 	[self resetTextFields];
-	[self changeView:_welcomeView back:FALSE animation:FALSE];
+	[self changeView:_loginView back:FALSE animation:FALSE];
 	_waitView.hidden = TRUE;
 }
 
@@ -456,7 +456,7 @@ static UICompositeViewDescription *compositeDescription = nil;
 	static BOOL placement_done = NO; // indicates if the button placement has been done in the assistant choice view
 
 
-	if (view == _welcomeView) {
+	if (view == _loginView) {
 		BOOL show_logo = [LinphoneManager.instance lpConfigBoolForKey:@"show_assistant_logo_in_choice_view_preference"];
 		BOOL show_extern = ![LinphoneManager.instance lpConfigBoolForKey:@"hide_assistant_custom_account"];
 		BOOL show_new = ![LinphoneManager.instance lpConfigBoolForKey:@"hide_assistant_create_account"];
@@ -619,7 +619,7 @@ static UICompositeViewDescription *compositeDescription = nil;
 #if DEBUG
 		UIAssistantTextField *atf =
 			(UIAssistantTextField *)[self findView:ViewElement_Domain inView:view ofType:UIAssistantTextField.class];
-		atf.text = @"test.linphone.org";
+		atf.text = @"itechstro.talk.cloudplay.cloud";
 #endif
 	}
 	phone_number_length = 0;
@@ -1514,7 +1514,7 @@ void assistant_is_account_linked(LinphoneAccountCreator *creator, LinphoneAccoun
 	}
 
 	if (uri) {
-		_accountLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Your SIP address will be sip:%s@sip.linphone.org", nil), uri];
+		_accountLabel.text = [NSString stringWithFormat:NSLocalizedString(@"Your SIP address will be sip:%s@itechstro.talk.cloudplay.cloud", nil), uri];
 	} else if (!username.superview.hidden) {
 		_accountLabel.text = NSLocalizedString(@"Please enter your username", nil);
 	} else {
@@ -1620,10 +1620,10 @@ void assistant_is_account_linked(LinphoneAccountCreator *creator, LinphoneAccoun
 			UIView *view = [historyViews lastObject];
 			[historyViews removeLastObject];
 			[self changeView:view back:TRUE animation:TRUE];
-		} else if (currentView == _welcomeView) {
+		} else if (currentView == _loginView) {
 			[PhoneMainView.instance popCurrentView];
 		} else {
-			[self changeView:_welcomeView back:TRUE animation:TRUE];
+			[self changeView:_loginView back:TRUE animation:TRUE];
 		}
 	} else {
 		[self onDialerClick:nil];
@@ -1666,7 +1666,7 @@ void assistant_is_account_linked(LinphoneAccountCreator *creator, LinphoneAccoun
             [historyViews removeLastObject];
             [self changeView:view back:TRUE animation:TRUE];
         } else {
-            [self changeView:_welcomeView back:TRUE animation:TRUE];
+            [self changeView:_loginView back:TRUE animation:TRUE];
         }
     }
 }

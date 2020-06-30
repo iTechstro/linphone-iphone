@@ -75,7 +75,7 @@ NSString *const kLinphoneFileTransferRecvUpdate = @"LinphoneFileTransferRecvUpda
 NSString *const kLinphoneQRCodeFound = @"LinphoneQRCodeFound";
 NSString *const kLinphoneChatCreateViewChange = @"LinphoneChatCreateViewChange";
 
-NSString *const kLinphoneMsgNotificationAppGroupId = @"group.org.linphone.phone.msgNotification";
+NSString *const kLinphoneMsgNotificationAppGroupId = @"group.cloud.cloudplay.phone.msgNotification";
 
 const int kLinphoneAudioVbrCodecDefaultBitrate = 36; /*you can override this from linphonerc or linphonerc-factory*/
 
@@ -322,7 +322,7 @@ struct codec_name_pref_table codec_pref_table[] = {{"speex", 8000, "speex_8k_pre
 		[self lpConfigSetString:@"https://subscribe.linphone.org:444/wizard.php"
 		 forKey:@"xmlrpc_url"
 		 inSection:@"assistant"];
-		[self lpConfigSetString:@"sip:rls@sip.linphone.org" forKey:@"rls_uri" inSection:@"sip"];
+		[self lpConfigSetString:@"sip:rls@itechstro.talk.cloudplay.cloud" forKey:@"rls_uri" inSection:@"sip"];
 		[self lpConfigSetBool:YES forKey:@"migration_xmlrpc"];
 	}
 	[self lpConfigSetBool:NO forKey:@"store_friends" inSection:@"misc"]; //so far, storing friends in files is not needed. may change in the future.
@@ -385,7 +385,7 @@ static int check_should_migrate_images(void *data, int argc, char **argv, char *
 			if (addr &&
 			    strstr(addr, [LinphoneManager.instance lpConfigStringForKey:@"domain_name"
 					  inSection:@"app"
-					  withDefault:@"sip.linphone.org"]
+					  withDefault:@"itechstro.talk.cloudplay.cloud"]
 				   .UTF8String) != 0) {
 				LOGI(@"Migrating proxy config to use AVPF");
 				linphone_proxy_config_enable_avpf(proxy, TRUE);
@@ -404,11 +404,11 @@ static int check_should_migrate_images(void *data, int argc, char **argv, char *
 			if (addr &&
 			    strstr(addr, [LinphoneManager.instance lpConfigStringForKey:@"domain_name"
 					  inSection:@"app"
-					  withDefault:@"sip.linphone.org"]
+					  withDefault:@"itechstro.talk.cloudplay.cloud"]
 				   .UTF8String) != 0) {
 				LOGI(@"Migrating proxy config to send quality report");
 				linphone_proxy_config_set_quality_reporting_collector(
-										      proxy, "sip:voip-metrics@sip.linphone.org;transport=tls");
+										      proxy, "sip:voip-metrics@itechstro.talk.cloudplay.cloud;transport=tls");
 				linphone_proxy_config_set_quality_reporting_interval(proxy, 180);
 				linphone_proxy_config_enable_quality_reporting(proxy, TRUE);
 			}
@@ -427,7 +427,7 @@ static int check_should_migrate_images(void *data, int argc, char **argv, char *
 	if ([self lpConfigBoolForKey:@"lime_migration_done"] == FALSE) {
 		const MSList *proxies = linphone_core_get_proxy_config_list(LC);
 		while (proxies) {
-			if (!strcmp(linphone_proxy_config_get_domain((LinphoneProxyConfig *)proxies->data),"sip.linphone.org")) {
+			if (!strcmp(linphone_proxy_config_get_domain((LinphoneProxyConfig *)proxies->data),"itechstro.talk.cloudplay.cloud")) {
 				linphone_core_set_lime_x3dh_server_url(LC, "https://lime.linphone.org/lime-server/lime-server.php");
 				break;
 			}
@@ -457,13 +457,13 @@ static int check_should_migrate_images(void *data, int argc, char **argv, char *
 	const bctbx_list_t * proxies = linphone_core_get_proxy_config_list(LC);
 	NSString *appDomain  = [LinphoneManager.instance lpConfigStringForKey:@"domain_name"
 				inSection:@"app"
-				withDefault:@"sip.linphone.org"];
+				withDefault:@"itechstro.talk.cloudplay.cloud"];
 	while (proxies) {
 		LinphoneProxyConfig *config = proxies->data;
 		// can not create group chat without conference factory
 		if (!linphone_proxy_config_get_conference_factory_uri(config)) {
 			if (strcmp(appDomain.UTF8String, linphone_proxy_config_get_domain(config)) == 0) {
-				linphone_proxy_config_set_conference_factory_uri(config, "sip:conference-factory@sip.linphone.org");
+				linphone_proxy_config_set_conference_factory_uri(config, "sip:conference-factory@itechstro.talk.cloudplay.cloud");
 			}
 		}
 		proxies = proxies->next;
@@ -1230,7 +1230,7 @@ void popup_link_account_cb(LinphoneAccountCreator *creator, LinphoneAccountCreat
 		    strcmp(linphone_proxy_config_get_domain(cfg),
 			   [LinphoneManager.instance lpConfigStringForKey:@"domain_name"
 			    inSection:@"app"
-			    withDefault:@"sip.linphone.org"]
+			    withDefault:@"itechstro.talk.cloudplay.cloud"]
 			   .UTF8String) == 0) {
 			UIAlertController *errView = [UIAlertController alertControllerWithTitle:NSLocalizedString(@"Link your account", nil)
 						      message:[NSString stringWithFormat:NSLocalizedString(@"Link your Linphone.org account %s to your phone number.", nil),
