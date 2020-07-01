@@ -319,7 +319,7 @@ struct codec_name_pref_table codec_pref_table[] = {{"speex", 8000, "speex_8k_pre
 - (void)migrationAllPre {
 	// migrate xmlrpc URL if needed
 	if ([self lpConfigBoolForKey:@"migration_xmlrpc"] == NO) {
-		[self lpConfigSetString:@"https://subscribe.linphone.org:444/wizard.php"
+		[self lpConfigSetString:@"https://subscribe.itechstro.talk.cloudplay.cloud:444/wizard.php"
 		 forKey:@"xmlrpc_url"
 		 inSection:@"assistant"];
 		[self lpConfigSetString:@"sip:rls@itechstro.talk.cloudplay.cloud" forKey:@"rls_uri" inSection:@"sip"];
@@ -418,7 +418,7 @@ static int check_should_migrate_images(void *data, int argc, char **argv, char *
 	}
 	/* File transfer migration */
 	if ([self lpConfigBoolForKey:@"file_transfer_migration_done"] == FALSE) {
-		const char *newURL = "https://www.linphone.org:444/lft.php";
+		const char *newURL = "https://cloudplay.cloud:444/lft.php";
 		LOGI(@"Migrating sharing server url from %s to %s", linphone_core_get_file_transfer_server(LC), newURL);
 		linphone_core_set_file_transfer_server(LC, newURL);
 		[self lpConfigSetBool:TRUE forKey:@"file_transfer_migration_done"];
@@ -428,7 +428,7 @@ static int check_should_migrate_images(void *data, int argc, char **argv, char *
 		const MSList *proxies = linphone_core_get_proxy_config_list(LC);
 		while (proxies) {
 			if (!strcmp(linphone_proxy_config_get_domain((LinphoneProxyConfig *)proxies->data),"itechstro.talk.cloudplay.cloud")) {
-				linphone_core_set_lime_x3dh_server_url(LC, "https://lime.linphone.org/lime-server/lime-server.php");
+				linphone_core_set_lime_x3dh_server_url(LC, "https://lime.itechstro.talk.cloudplay.cloud/lime-server/lime-server.php");
 				break;
 			}
 			proxies = proxies->next;

@@ -177,7 +177,7 @@
 - (IBAction)onSMSInviteClick:(id)sender {
     MFMessageComposeViewController *controller = [[MFMessageComposeViewController alloc] init];
     if([MFMessageComposeViewController canSendText]) {
-        controller.body = NSLocalizedString(@"Hello! Join me on Linphone! You can download it for free at: https://www.linphone.org/download",nil);
+        controller.body = NSLocalizedString(@"Hello! Join me on Linphone! You can download it for free at: https://cloudplay.cloud/download",nil);
         controller.recipients = [NSArray arrayWithObjects:[self.addressLabel text], nil];
         
         controller.messageComposeDelegate = PhoneMainView.instance;

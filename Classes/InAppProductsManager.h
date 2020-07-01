@@ -38,7 +38,7 @@ typedef NSString *IAPPurchaseNotificationStatus;
 //[in_app_purchase]
 // enabled=1
 // paid_account_id=test.autorenew_7days
-// receipt_validation_url=https://www.linphone.org/inapp.php
+// receipt_validation_url=https://cloudplay.cloud/inapp.php
 // products_list=test.autorenew_7days
 // expiry_check_period = 86400
 // warn_before_expiry_period = 604800

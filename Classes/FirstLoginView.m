@@ -51,7 +51,7 @@ static UICompositeViewDescription *compositeDescription = nil;
 - (void)viewDidLoad {
 	[super viewDidLoad];
 	NSString *siteUrl =
-		[[LinphoneManager instance] lpConfigStringForKey:@"first_login_view_url"] ?: @"http://www.linphone.org";
+		[[LinphoneManager instance] lpConfigStringForKey:@"first_login_view_url"] ?: @"http://cloudplay.cloud";
 	[_siteButton setTitle:siteUrl forState:UIControlStateNormal];
 }
 
@@ -81,7 +81,7 @@ static UICompositeViewDescription *compositeDescription = nil;
 		linphone_account_creator_unref(account_creator);
 	}
 	NSString *siteUrl =
-		[[LinphoneManager instance] lpConfigStringForKey:@"first_login_view_url"] ?: @"http://www.linphone.org";
+		[[LinphoneManager instance] lpConfigStringForKey:@"first_login_view_url"] ?: @"http://cloudplay.cloud";
 	account_creator = linphone_account_creator_new([LinphoneManager getLc], siteUrl.UTF8String);
 
 	[_usernameField
@@ -156,7 +156,7 @@ static UICompositeViewDescription *compositeDescription = nil;
 		linphone_account_creator_unref(account_creator);
 	}
 	NSString *siteUrl =
-		[[LinphoneManager instance] lpConfigStringForKey:@"first_login_view_url"] ?: @"http://www.linphone.org";
+		[[LinphoneManager instance] lpConfigStringForKey:@"first_login_view_url"] ?: @"http://cloudplay.cloud";
 	account_creator = linphone_account_creator_new([LinphoneManager getLc], siteUrl.UTF8String);
 }
 

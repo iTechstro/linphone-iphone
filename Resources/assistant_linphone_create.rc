@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<config xmlns="http://www.linphone.org/xsds/lpconfig.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.linphone.org/xsds/lpconfig.xsd lpconfig.xsd">
+<config xmlns="http://cloudplay.cloud/xsds/lpconfig.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://cloudplay.cloud/xsds/lpconfig.xsd lpconfig.xsd">
 
 	<section name="proxy_default_values">
 		<entry name="avpf" overwrite="true">1</entry>
@@ -18,7 +18,7 @@
 	</section>
 
 	<section name="nat_policy_default_values">
-		<entry name="stun_server" overwrite="true">stun.linphone.org</entry>
+        <entry name="stun_server" overwrite="true">stun.itechstro.talk.cloudplay.cloud</entry>
 		<entry name="protocols" overwrite="true">stun,ice</entry>
 	</section>
 
@@ -38,6 +38,6 @@
 		<entry name="username_regex" overwrite="true">^[a-z0-9+_.\-]*$</entry>
 	</section>
 	<section name="lime">
-		<entry name="lime_server_url" overwrite="true">https://lime.linphone.org/lime-server/lime-server.php</entry>
+        <entry name="lime_server_url" overwrite="true">https://lime.itechstro.talk.cloudplay.cloud/lime-server/lime-server.php</entry>
 	</section>
 </config>

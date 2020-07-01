@@ -33,7 +33,7 @@
 			<key>CFBundleURLIconFile</key>
 			<string>linphone_icon_72@2x</string>
 			<key>CFBundleURLName</key>
-			<string>org.linphone.phone</string>
+			<string>cloud.cloudplay.phone</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>sip</string>
@@ -45,7 +45,7 @@
 			<key>CFBundleURLIconFile</key>
 			<string>linphone_icon_72@2x</string>
 			<key>CFBundleURLName</key>
-			<string>org.linphone.phone</string>
+			<string>cloud.cloudplay.phone</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>linphone-config</string>
@@ -57,7 +57,7 @@
 			<key>CFBundleURLIconFile</key>
 			<string>linphone_icon_72@2x</string>
 			<key>CFBundleURLName</key>
-			<string>org.linphone.phone</string>
+			<string>cloud.cloudplay.phone</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>message-linphone</string>
@@ -69,7 +69,7 @@
 			<key>CFBundleURLIconFile</key>
 			<string>linphone_icon_72@2x</string>
 			<key>CFBundleURLName</key>
-			<string>org.linphone.phone</string>
+			<string>cloud.cloudplay.phone</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>linphone-widget</string>
@@ -100,7 +100,7 @@
 	<string>Share photos with your friends and customize avatars</string>
 	<key>NSUbiquitousContainers</key>
 	<dict>
-		<key>iCloud.org.linphone.phone</key>
+		<key>iCloud.cloud.cloudplay.phone</key>
 		<dict>
 			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
 			<true/>
